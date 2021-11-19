@@ -1,4 +1,4 @@
-use tiefring::{Canvas, Color};
+use tefrung::{Canvas, Color};
 use winit::{
     dpi::LogicalSize,
     event::{Event, VirtualKeyCode},
@@ -18,7 +18,7 @@ fn main() {
     let window = {
         let size = LogicalSize::new(WIDTH as f64, HEIGHT as f64);
         WindowBuilder::new()
-            .with_title("Hello Tiefring")
+            .with_title("Hello Tēfrung")
             .with_inner_size(size)
             .with_min_inner_size(size)
             .build(&event_loop)
