@@ -1,3 +1,4 @@
+use camera::Camera;
 use raw_window_handle::HasRawWindowHandle;
 use renderer::ColorRenderer;
 use thiserror::Error;
@@ -5,6 +6,7 @@ use thiserror::Error;
 pub use wgpu::Color;
 use wgpu::{CommandEncoder, RenderPass, SurfaceError};
 
+mod camera;
 mod renderer;
 
 #[derive(Error, Debug)]
@@ -22,6 +24,7 @@ pub struct Canvas {
     wgpu_context: WgpuContext,
     graphics: Graphics,
     color_renderer: ColorRenderer,
+    camera: Camera,
 }
 
 impl Canvas {
@@ -31,11 +34,13 @@ impl Canvas {
     {
         let wgpu_context = WgpuContext::new(window, width, height).await?;
         let graphics = Graphics::new();
-        let color_renderer = ColorRenderer::new(&wgpu_context);
+        let camera = Camera::new(&wgpu_context, width, height);
+        let color_renderer = ColorRenderer::new(&wgpu_context, &camera);
         Ok(Canvas {
             wgpu_context,
             graphics,
             color_renderer,
+            camera,
         })
     }
 
@@ -89,18 +94,15 @@ impl Canvas {
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
-        self.wgpu_context.size = Size { width, height };
-        self.wgpu_context.config.width = width;
-        self.wgpu_context.config.height = height;
-        self.wgpu_context
-            .surface
-            .configure(&self.wgpu_context.device, &self.wgpu_context.config);
+        self.wgpu_context.resize(width, height);
+        self.camera.resize(&self.wgpu_context, width, height);
     }
 
     fn handle_draw_operations<'a>(&'a mut self, render_pass: &mut RenderPass<'a>) {
         self.color_renderer.render(
             render_pass,
             &self.wgpu_context,
+            &self.camera,
             &self.graphics.draw_rect_operations,
         );
 
@@ -219,6 +221,13 @@ impl WgpuContext {
             queue,
             size,
         })
+    }
+
+    fn resize(&mut self, width: u32, height: u32) {
+        self.size = Size { width, height };
+        self.config.width = width;
+        self.config.height = height;
+        self.surface.configure(&self.device, &self.config);
     }
 }
 

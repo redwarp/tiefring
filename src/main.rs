@@ -36,7 +36,7 @@ fn main() {
             canvas
                 .draw(|graphics| {
                     graphics.draw_rect(
-                        [-1, -1, 1, 1],
+                        [0, 0, 100, 100],
                         Color {
                             r: 1.0,
                             g: 1.0,
@@ -45,7 +45,7 @@ fn main() {
                         },
                     );
                     graphics.draw_rect(
-                        [0, 0, 2, 2],
+                        [50, 50, 150, 150],
                         Color {
                             r: 1.0,
                             g: 0.0,

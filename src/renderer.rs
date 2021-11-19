@@ -1,6 +1,9 @@
 use wgpu::{util::DeviceExt, Buffer, Color, RenderPass, RenderPipeline};
 
-use crate::{DrawRectOperation, WgpuContext};
+use crate::{
+    camera::{self, Camera},
+    DrawRectOperation, WgpuContext,
+};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -17,12 +20,6 @@ fn color_to_float_array(color: Color) -> [f32; 4] {
         color.a as f32,
     ]
 }
-
-// impl Into<[f32; 4]> for Color {
-//     fn into(self) -> [f32; 4] {
-//         [self.r as f32, self.g as f32, self.b as f32, self.a as f32]
-//     }
-// }
 
 impl ColorVertex {
     fn description<'a>() -> wgpu::VertexBufferLayout<'a> {
@@ -51,7 +48,7 @@ pub(crate) struct ColorRenderer {
 }
 
 impl ColorRenderer {
-    pub(crate) fn new(context: &WgpuContext) -> Self {
+    pub(crate) fn new(context: &WgpuContext, camera: &Camera) -> Self {
         let shader = context
             .device
             .create_shader_module(&wgpu::ShaderModuleDescriptor {
@@ -64,7 +61,7 @@ impl ColorRenderer {
                 .device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Color Render Pipeline Layout"),
-                    bind_group_layouts: &[],
+                    bind_group_layouts: &[&camera.camera_bind_group_layout],
                     push_constant_ranges: &[],
                 });
 
@@ -93,7 +90,7 @@ impl ColorRenderer {
                     primitive: wgpu::PrimitiveState {
                         topology: wgpu::PrimitiveTopology::TriangleList, // 1.
                         strip_index_format: None,
-                        front_face: wgpu::FrontFace::Cw, // 2.
+                        front_face: wgpu::FrontFace::Ccw, // 2.
                         cull_mode: Some(wgpu::Face::Back),
                         // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
                         polygon_mode: wgpu::PolygonMode::Fill,
@@ -120,12 +117,13 @@ impl ColorRenderer {
         &'a mut self,
         render_pass: &mut RenderPass<'a>,
         context: &WgpuContext,
+        camera: &'a Camera,
         operations: &[DrawRectOperation],
     ) {
         let vertices: Vec<_> = operations
             .iter()
             .flat_map(|operation| {
-                let rect = &operation.0 * 0.2;
+                let rect = &operation.0;
                 let color: [f32; 4] = color_to_float_array(operation.1);
                 [
                     ColorVertex {
@@ -169,6 +167,7 @@ impl ColorRenderer {
         if let Some(vertex_buffer) = &self.vertex_buffer {
             let count = vertices.len() as u32;
             render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);
             render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
             render_pass.draw(0..count, 0..1)
         }
