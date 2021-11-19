@@ -1,4 +1,4 @@
-use tiefran::{Canvas, Color};
+use tiefring::{Canvas, Color};
 use winit::{
     dpi::LogicalSize,
     event::{Event, VirtualKeyCode},

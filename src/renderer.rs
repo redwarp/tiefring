@@ -2,45 +2,6 @@ use wgpu::{util::DeviceExt, Buffer, Color, RenderPass, RenderPipeline};
 
 use crate::{DrawRectOperation, WgpuContext};
 
-const VERTICES: &[ColorVertex] = &[
-    ColorVertex {
-        position: [-0.0868241, 0.49240386],
-        color: [0.5, 0.0, 0.5, 1.0],
-    }, // A
-    ColorVertex {
-        position: [-0.49513406, 0.06958647],
-        color: [0.5, 0.0, 0.5, 1.0],
-    }, // B
-    ColorVertex {
-        position: [0.44147372, 0.2347359],
-        color: [0.5, 0.0, 0.5, 1.0],
-    }, // E
-    ColorVertex {
-        position: [-0.49513406, 0.06958647],
-        color: [0.5, 0.0, 0.5, 1.0],
-    }, // B
-    ColorVertex {
-        position: [-0.21918549, -0.44939706],
-        color: [0.5, 0.0, 0.5, 1.0],
-    }, // C
-    ColorVertex {
-        position: [0.44147372, 0.2347359],
-        color: [0.5, 0.0, 0.5, 1.0],
-    }, // E
-    ColorVertex {
-        position: [-0.21918549, -0.44939706],
-        color: [0.5, 0.0, 0.5, 1.0],
-    }, // C
-    ColorVertex {
-        position: [0.35966998, -0.3473291],
-        color: [0.5, 0.0, 0.5, 1.0],
-    }, // D
-    ColorVertex {
-        position: [0.44147372, 0.2347359],
-        color: [0.5, 0.0, 0.5, 1.0],
-    }, // E
-];
-
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct ColorVertex {
@@ -125,7 +86,7 @@ impl ColorRenderer {
                         targets: &[wgpu::ColorTargetState {
                             // 4.
                             format: context.config.format,
-                            blend: Some(wgpu::BlendState::REPLACE),
+                            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                             write_mask: wgpu::ColorWrites::ALL,
                         }],
                     }),
@@ -202,13 +163,6 @@ impl ColorRenderer {
                 contents: bytemuck::cast_slice(&vertices[..]),
                 usage: wgpu::BufferUsages::VERTEX,
             });
-        // let vertex_buffer = context
-        //     .device
-        //     .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        //         label: Some("Vertex Buffer"),
-        //         contents: bytemuck::cast_slice(&VERTICES[..]),
-        //         usage: wgpu::BufferUsages::VERTEX,
-        //     });
 
         self.vertex_buffer = Some(vertex_buffer);
 

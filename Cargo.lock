@@ -1202,7 +1202,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tiefran"
+name = "tiefring"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
