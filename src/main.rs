@@ -1,4 +1,6 @@
-use tefrung::{Canvas, Color};
+use std::{cell::RefCell, rc::Rc};
+
+use tefrung::{Canvas, Color, Position};
 use winit::{
     dpi::LogicalSize,
     event::{Event, VirtualKeyCode},
@@ -31,6 +33,8 @@ fn main() {
         pollster::block_on(Canvas::new(&window, window_size.width, window_size.height))
     }
     .unwrap();
+
+    let sprite = canvas.load_sprite();
 
     window.set_visible(true);
 
@@ -67,6 +71,13 @@ fn main() {
                             a: 0.75,
                         },
                     );
+                    graphics.draw_sprite(
+                        Position {
+                            left: 0.0,
+                            top: 0.0,
+                        },
+                        &sprite,
+                    )
                 })
                 .unwrap();
         }

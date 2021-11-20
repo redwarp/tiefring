@@ -1,8 +1,8 @@
-use wgpu::{util::DeviceExt, Buffer, Color, RenderPass, RenderPipeline};
+use wgpu::{util::DeviceExt, Buffer, Color, RenderPass, RenderPipeline, Sampler};
 
 use crate::{
     camera::{self, Camera},
-    DrawRectOperation, WgpuContext,
+    DrawRectOperation, DrawTextureOperation, WgpuContext,
 };
 
 #[repr(C)]
@@ -178,5 +178,96 @@ impl ColorRenderer {
             render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..count, 0, 0..1);
         }
+    }
+}
+
+pub struct SpriteRenderer {
+    render_pipeline: RenderPipeline,
+    sampler: Sampler,
+}
+
+impl SpriteRenderer {
+    pub(crate) fn new(context: &WgpuContext, camera: &Camera) -> Self {
+        let shader = context
+            .device
+            .create_shader_module(&wgpu::ShaderModuleDescriptor {
+                label: Some("Shader"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("shaders/sprite.wgsl").into()),
+            });
+
+        let render_pipeline_layout =
+            context
+                .device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("Sprite Render Pipeline Layout"),
+                    bind_group_layouts: &[&camera.camera_bind_group_layout],
+                    push_constant_ranges: &[],
+                });
+
+        let render_pipeline =
+            context
+                .device
+                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("Color Render Pipeline"),
+                    layout: Some(&render_pipeline_layout),
+                    vertex: wgpu::VertexState {
+                        module: &shader,
+                        entry_point: "vs_main",                 // 1.
+                        buffers: &[ColorVertex::description()], // 2.
+                    },
+                    fragment: Some(wgpu::FragmentState {
+                        // 3.
+                        module: &shader,
+                        entry_point: "fs_main",
+                        targets: &[wgpu::ColorTargetState {
+                            // 4.
+                            format: context.config.format,
+                            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                            write_mask: wgpu::ColorWrites::ALL,
+                        }],
+                    }),
+                    primitive: wgpu::PrimitiveState {
+                        topology: wgpu::PrimitiveTopology::TriangleList, // 1.
+                        strip_index_format: None,
+                        front_face: wgpu::FrontFace::Ccw, // 2.
+                        cull_mode: Some(wgpu::Face::Back),
+                        // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
+                        polygon_mode: wgpu::PolygonMode::Fill,
+                        // Requires Features::DEPTH_CLAMPING
+                        clamp_depth: false,
+                        // Requires Features::CONSERVATIVE_RASTERIZATION
+                        conservative: false,
+                    },
+                    depth_stencil: None, // 1.
+                    multisample: wgpu::MultisampleState {
+                        count: 1,                         // 2.
+                        mask: !0,                         // 3.
+                        alpha_to_coverage_enabled: false, // 4.
+                    },
+                });
+
+        let sampler = context.device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
+        SpriteRenderer {
+            render_pipeline,
+            sampler,
+        }
+    }
+
+    pub(crate) fn render<'a>(
+        &'a mut self,
+        render_pass: &mut RenderPass<'a>,
+        context: &WgpuContext,
+        camera: &'a Camera,
+        operations: &[DrawTextureOperation],
+    ) {
     }
 }
