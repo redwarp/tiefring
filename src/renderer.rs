@@ -44,7 +44,7 @@ impl ColorVertex {
 
 pub(crate) struct ColorRenderer {
     render_pipeline: RenderPipeline,
-    vertex_buffer: Option<Buffer>,
+    vertex_buffer: Option<(Buffer, Buffer)>,
 }
 
 impl ColorRenderer {
@@ -139,18 +139,17 @@ impl ColorRenderer {
                         color: color,
                     },
                     ColorVertex {
-                        position: [rect.right as f32, rect.bottom as f32],
-                        color: color,
-                    },
-                    ColorVertex {
                         position: [rect.right as f32, rect.top as f32],
                         color: color,
                     },
-                    ColorVertex {
-                        position: [rect.left as f32, rect.top as f32],
-                        color: color,
-                    },
                 ]
+            })
+            .collect();
+
+        let indices: Vec<u16> = (0..operations.len())
+            .flat_map(|index| {
+                let step: u16 = index as u16 * 4;
+                [step + 0, step + 1, step + 2, step + 2, step + 3, step + 0]
             })
             .collect();
 
@@ -161,15 +160,23 @@ impl ColorRenderer {
                 contents: bytemuck::cast_slice(&vertices[..]),
                 usage: wgpu::BufferUsages::VERTEX,
             });
+        let index_buffer = context
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(&indices[..]),
+                usage: wgpu::BufferUsages::INDEX,
+            });
 
-        self.vertex_buffer = Some(vertex_buffer);
+        self.vertex_buffer = Some((vertex_buffer, index_buffer));
 
-        if let Some(vertex_buffer) = &self.vertex_buffer {
-            let count = vertices.len() as u32;
+        if let Some((vertex_buffer, index_buffer)) = &self.vertex_buffer {
+            let count = indices.len() as u32;
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);
             render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-            render_pass.draw(0..count, 0..1)
+            render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.draw_indexed(0..count, 0, 0..1);
         }
     }
 }

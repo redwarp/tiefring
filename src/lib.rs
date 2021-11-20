@@ -8,6 +8,7 @@ use wgpu::{CommandEncoder, RenderPass, SurfaceError};
 
 mod camera;
 mod renderer;
+mod sprite;
 
 #[derive(Error, Debug)]
 pub enum Error {
