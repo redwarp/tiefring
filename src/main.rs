@@ -21,6 +21,7 @@ fn main() {
             .with_title("Hello Tēfrung")
             .with_inner_size(size)
             .with_min_inner_size(size)
+            .with_visible(false)
             .build(&event_loop)
             .unwrap()
     };
@@ -31,7 +32,11 @@ fn main() {
     }
     .unwrap();
 
+    window.set_visible(true);
+
     event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Poll;
+
         if let Event::RedrawRequested(_) = event {
             canvas
                 .draw(|graphics| {
