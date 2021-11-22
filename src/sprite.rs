@@ -5,6 +5,7 @@ use crate::{Canvas, Rect, Size};
 pub struct Sprite {
     pub(crate) texture_id: TextureId,
     pub(crate) rect: Rect,
+    pub(crate) tex_coord: Rect,
     texture_repository: Rc<RefCell<TextureRepository>>,
 }
 
@@ -78,6 +79,12 @@ impl Sprite {
             right: size.width as f32,
             bottom: size.height as f32,
         };
+        let tex_coord = Rect {
+            left: 0.0,
+            top: 0.0,
+            right: 1.0,
+            bottom: 1.0,
+        };
 
         let texture_id = {
             let mut repository = canvas.texture_repository.borrow_mut();
@@ -87,6 +94,7 @@ impl Sprite {
         Sprite {
             texture_id,
             rect,
+            tex_coord,
             texture_repository: canvas.texture_repository.clone(),
         }
     }
@@ -95,10 +103,10 @@ impl Sprite {
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub(crate) struct TextureId(u32);
 
-struct Texture {
-    texture: wgpu::Texture,
-    texture_view: wgpu::TextureView,
-    size: Size,
+pub(crate) struct Texture {
+    pub texture: wgpu::Texture,
+    pub texture_view: wgpu::TextureView,
+    pub size: Size,
 }
 
 pub(crate) struct TextureRepository {
@@ -127,7 +135,7 @@ impl TextureRepository {
         texture_id
     }
 
-    fn get_texture(&self, texture_id: &TextureId) -> Option<Rc<Texture>> {
+    pub(crate) fn get_texture(&self, texture_id: &TextureId) -> Option<Rc<Texture>> {
         self.textures.get(texture_id).map(|texture| texture.clone())
     }
 

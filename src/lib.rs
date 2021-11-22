@@ -5,7 +5,7 @@ use std::{
 
 use camera::Camera;
 use raw_window_handle::HasRawWindowHandle;
-use renderer::ColorRenderer;
+use renderer::{ColorRenderer, TextureRenderer};
 use sprite::{Sprite, TextureId, TextureRepository};
 use thiserror::Error;
 
@@ -31,6 +31,7 @@ pub struct Canvas {
     wgpu_context: WgpuContext,
     graphics: Graphics,
     color_renderer: ColorRenderer,
+    texture_renderer: TextureRenderer,
     camera: Camera,
     texture_repository: Rc<RefCell<TextureRepository>>,
 }
@@ -44,11 +45,13 @@ impl Canvas {
         let graphics = Graphics::new();
         let camera = Camera::new(&wgpu_context, width, height);
         let color_renderer = ColorRenderer::new(&wgpu_context, &camera);
+        let texture_renderer = TextureRenderer::new(&wgpu_context, &camera);
         let texture_repository = Rc::new(RefCell::new(TextureRepository::new()));
         Ok(Canvas {
             wgpu_context,
             graphics,
             color_renderer,
+            texture_renderer,
             camera,
             texture_repository,
         })
@@ -119,6 +122,13 @@ impl Canvas {
             &self.camera,
             &self.graphics.draw_rect_operations,
         );
+        self.texture_renderer.render(
+            render_pass,
+            &self.wgpu_context,
+            &self.texture_repository,
+            &self.camera,
+            &self.graphics.draw_texture_operations,
+        );
 
         self.graphics.draw_rect_operations.clear();
         self.graphics.draw_texture_operations.clear();
@@ -144,12 +154,12 @@ impl Graphics {
     }
 
     pub fn draw_sprite(&mut self, position: Position, sprite: &Sprite) {
-        let from = sprite.rect;
+        let from = sprite.tex_coord;
         let to = Rect {
             left: position.left,
             top: position.top,
-            right: position.left + from.width(),
-            bottom: position.top + from.height(),
+            right: position.left + sprite.rect.width(),
+            bottom: position.top + sprite.rect.height(),
         };
         let texture_id = sprite.texture_id;
         self.draw_texture_operations.push(DrawTextureOperation {
@@ -163,9 +173,9 @@ impl Graphics {
 pub(crate) struct DrawRectOperation(Rect, Color);
 
 pub(crate) struct DrawTextureOperation {
-    from: Rect,
-    to: Rect,
-    texture_id: TextureId,
+    pub from: Rect,
+    pub to: Rect,
+    pub texture_id: TextureId,
 }
 
 #[derive(Clone, Copy)]
