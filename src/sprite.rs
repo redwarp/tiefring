@@ -5,7 +5,7 @@ use crate::{Canvas, Rect, Size};
 pub struct Sprite {
     pub(crate) texture_id: TextureId,
     pub(crate) rect: Rect,
-    pub(crate) tex_coord: Rect,
+    pub(crate) tex_coords: Rect,
     texture_repository: Rc<RefCell<TextureRepository>>,
 }
 
@@ -94,7 +94,7 @@ impl Sprite {
         Sprite {
             texture_id,
             rect,
-            tex_coord,
+            tex_coords: tex_coord,
             texture_repository: canvas.texture_repository.clone(),
         }
     }

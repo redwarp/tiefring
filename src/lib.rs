@@ -154,8 +154,8 @@ impl Graphics {
     }
 
     pub fn draw_sprite(&mut self, position: Position, sprite: &Sprite) {
-        let from = sprite.tex_coord;
-        let to = Rect {
+        let tex_coords = sprite.tex_coords;
+        let destination = Rect {
             left: position.left,
             top: position.top,
             right: position.left + sprite.rect.width(),
@@ -163,8 +163,8 @@ impl Graphics {
         };
         let texture_id = sprite.texture_id;
         self.draw_texture_operations.push(DrawTextureOperation {
-            from,
-            to,
+            tex_coords,
+            destination,
             texture_id,
         });
     }
@@ -173,8 +173,8 @@ impl Graphics {
 pub(crate) struct DrawRectOperation(Rect, Color);
 
 pub(crate) struct DrawTextureOperation {
-    pub from: Rect,
-    pub to: Rect,
+    pub tex_coords: Rect,
+    pub destination: Rect,
     pub texture_id: TextureId,
 }
 

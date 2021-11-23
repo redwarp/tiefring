@@ -308,23 +308,23 @@ impl TextureRenderer {
         for operation in operations {
             let vertices = [
                 TextureVertex {
-                    position: [operation.to.left, operation.to.top],
-                    tex_coords: [operation.from.left, operation.from.top],
+                    position: [operation.destination.left, operation.destination.top],
+                    tex_coords: [operation.tex_coords.left, operation.tex_coords.top],
                 },
                 TextureVertex {
-                    position: [operation.to.left, operation.to.bottom],
-                    tex_coords: [operation.from.left, operation.from.bottom],
+                    position: [operation.destination.left, operation.destination.bottom],
+                    tex_coords: [operation.tex_coords.left, operation.tex_coords.bottom],
                 },
                 TextureVertex {
-                    position: [operation.to.right, operation.to.bottom],
-                    tex_coords: [operation.from.right, operation.from.bottom],
+                    position: [operation.destination.right, operation.destination.bottom],
+                    tex_coords: [operation.tex_coords.right, operation.tex_coords.bottom],
                 },
                 TextureVertex {
-                    position: [operation.to.right, operation.to.top],
-                    tex_coords: [operation.from.right, operation.from.top],
+                    position: [operation.destination.right, operation.destination.top],
+                    tex_coords: [operation.tex_coords.right, operation.tex_coords.top],
                 },
             ];
-            let indices = [0, 1, 2, 2, 3, 0];
+            let indices: [u16; 6] = [0, 1, 2, 2, 3, 0];
 
             let vertex_buffer =
                 context
@@ -342,7 +342,6 @@ impl TextureRenderer {
                         contents: bytemuck::cast_slice(&indices[..]),
                         usage: wgpu::BufferUsages::INDEX,
                     });
-            println!("{:?}", vertices);
 
             let texture = texture_repository
                 .borrow()
@@ -422,10 +421,9 @@ impl TextureRenderer {
         for (vertex_buffer, index_buffer, render_pipeline, texture_bind_group) in
             &self.vertex_buffer
         {
-            println!("Drawing something");
             render_pass.set_pipeline(render_pipeline);
             render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);
-            render_pass.set_bind_group(1, texture_bind_group, &[]);
+            render_pass.set_bind_group(1, &texture_bind_group, &[]);
             render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
             render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..6, 0, 0..1);
