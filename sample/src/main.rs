@@ -32,7 +32,7 @@ fn main() {
     }
     .unwrap();
 
-    let sprite = canvas.load_sprite();
+    let sprite = canvas.load_sprite("sample/sprites/p1_jump.png").unwrap();
 
     window.set_visible(true);
 

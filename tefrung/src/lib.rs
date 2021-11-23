@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, path::Path, rc::Rc};
 
 use camera::Camera;
 use raw_window_handle::HasRawWindowHandle;
@@ -106,8 +106,8 @@ impl Canvas {
         self.camera.resize(&self.wgpu_context, width, height);
     }
 
-    pub fn load_sprite(&mut self) -> Sprite {
-        Sprite::load(self)
+    pub fn load_sprite<P: AsRef<Path>>(&mut self, path: P) -> Option<Sprite> {
+        Sprite::load_image(self, path)
     }
 
     fn handle_draw_operations<'a>(&'a mut self, render_pass: &mut RenderPass<'a>) {

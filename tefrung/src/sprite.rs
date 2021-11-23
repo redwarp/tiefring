@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, fs::File, path::Path, rc::Rc};
 
 use wgpu::{BindGroup, RenderPipeline};
 
@@ -20,13 +20,7 @@ impl Drop for Sprite {
 }
 
 impl Sprite {
-    pub fn load(canvas: &mut Canvas) -> Self {
-        let image = image::load_from_memory(include_bytes!("sprites/p1_jump.png")).unwrap();
-        let rgba = image.as_rgba8().unwrap();
-
-        use image::GenericImageView;
-        let dimensions = image.dimensions();
-
+    pub fn load_data(canvas: &mut Canvas, rgba: &[u8], dimensions: (u32, u32)) -> Self {
         let size = Size {
             width: dimensions.0,
             height: dimensions.1,
@@ -57,6 +51,17 @@ impl Sprite {
             tex_coords: tex_coord,
             texture_repository: canvas.texture_repository.clone(),
         }
+    }
+
+    pub fn load_image<P: AsRef<Path>>(canvas: &mut Canvas, path: P) -> Option<Self> {
+        let image = image::open(path).ok()?;
+
+        let rgba = image.as_rgba8()?;
+
+        use image::GenericImageView;
+        let dimensions = image.dimensions();
+
+        Some(Sprite::load_data(canvas, rgba, dimensions))
     }
 }
 
