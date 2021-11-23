@@ -22,8 +22,6 @@ pub enum Error {
     RenderingFailed(wgpu::SurfaceError),
 }
 
-pub struct Texture {}
-
 pub struct Canvas {
     wgpu_context: WgpuContext,
     graphics: Graphics,

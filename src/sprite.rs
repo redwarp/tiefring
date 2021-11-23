@@ -1,6 +1,8 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use crate::{Canvas, Rect, Size};
+use wgpu::{BindGroup, RenderPipeline};
+
+use crate::{renderer::TextureVertex, Canvas, Rect, Size};
 
 pub struct Sprite {
     pub(crate) texture_id: TextureId,
@@ -25,6 +27,52 @@ impl Sprite {
         use image::GenericImageView;
         let dimensions = image.dimensions();
 
+        let size = Size {
+            width: dimensions.0,
+            height: dimensions.1,
+        };
+
+        let texture = Texture::new(canvas, rgba, dimensions);
+        let rect = Rect {
+            left: 0.0,
+            top: 0.0,
+            right: size.width as f32,
+            bottom: size.height as f32,
+        };
+        let tex_coord = Rect {
+            left: 0.0,
+            top: 0.0,
+            right: 1.0,
+            bottom: 1.0,
+        };
+
+        let texture_id = {
+            let mut repository = canvas.texture_repository.borrow_mut();
+            repository.store_texture(texture)
+        };
+
+        Sprite {
+            texture_id,
+            rect,
+            tex_coords: tex_coord,
+            texture_repository: canvas.texture_repository.clone(),
+        }
+    }
+}
+
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+pub(crate) struct TextureId(u32);
+
+pub(crate) struct Texture {
+    pub wgpu_texture: wgpu::Texture,
+    pub texture_view: wgpu::TextureView,
+    pub size: Size,
+    pub texture_bind_group: BindGroup,
+    pub render_pipeline: RenderPipeline,
+}
+
+impl Texture {
+    fn new(canvas: &Canvas, rgba: &[u8], dimensions: (u32, u32)) -> Self {
         let texture_size = wgpu::Extent3d {
             width: dimensions.0,
             height: dimensions.1,
@@ -68,45 +116,79 @@ impl Sprite {
             height: dimensions.1,
         };
 
+        let texture_bind_group: BindGroup =
+            canvas
+                .wgpu_context
+                .device
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    layout: &canvas.texture_renderer.texture_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(&texture_view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(
+                                &canvas.texture_renderer.sampler,
+                            ),
+                        },
+                    ],
+                    label: Some("diffuse_bind_group"),
+                });
+
+        let render_pipeline =
+            canvas
+                .wgpu_context
+                .device
+                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("Texture Render Pipeline"),
+                    layout: Some(&canvas.texture_renderer.render_pipeline_layout),
+                    vertex: wgpu::VertexState {
+                        module: &canvas.texture_renderer.shader,
+                        entry_point: "vs_main",                   // 1.
+                        buffers: &[TextureVertex::description()], // 2.
+                    },
+                    fragment: Some(wgpu::FragmentState {
+                        // 3.
+                        module: &canvas.texture_renderer.shader,
+                        entry_point: "fs_main",
+                        targets: &[wgpu::ColorTargetState {
+                            // 4.
+                            format: canvas.wgpu_context.config.format,
+                            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                            write_mask: wgpu::ColorWrites::ALL,
+                        }],
+                    }),
+                    primitive: wgpu::PrimitiveState {
+                        topology: wgpu::PrimitiveTopology::TriangleList, // 1.
+                        strip_index_format: None,
+                        front_face: wgpu::FrontFace::Ccw, // 2.
+                        cull_mode: Some(wgpu::Face::Back),
+                        // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
+                        polygon_mode: wgpu::PolygonMode::Fill,
+                        // Requires Features::DEPTH_CLAMPING
+                        clamp_depth: false,
+                        // Requires Features::CONSERVATIVE_RASTERIZATION
+                        conservative: false,
+                    },
+                    depth_stencil: None, // 1.
+                    multisample: wgpu::MultisampleState {
+                        count: 1,                         // 2.
+                        mask: !0,                         // 3.
+                        alpha_to_coverage_enabled: false, // 4.
+                    },
+                });
+
         let texture = Texture {
-            texture: wgpu_texture,
+            wgpu_texture,
             texture_view,
             size,
+            texture_bind_group,
+            render_pipeline,
         };
-        let rect = Rect {
-            left: 0.0,
-            top: 0.0,
-            right: size.width as f32,
-            bottom: size.height as f32,
-        };
-        let tex_coord = Rect {
-            left: 0.0,
-            top: 0.0,
-            right: 1.0,
-            bottom: 1.0,
-        };
-
-        let texture_id = {
-            let mut repository = canvas.texture_repository.borrow_mut();
-            repository.store_texture(texture)
-        };
-
-        Sprite {
-            texture_id,
-            rect,
-            tex_coords: tex_coord,
-            texture_repository: canvas.texture_repository.clone(),
-        }
+        texture
     }
-}
-
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
-pub(crate) struct TextureId(u32);
-
-pub(crate) struct Texture {
-    pub texture: wgpu::Texture,
-    pub texture_view: wgpu::TextureView,
-    pub size: Size,
 }
 
 pub(crate) struct TextureRepository {
