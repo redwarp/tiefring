@@ -1,0 +1,11 @@
+[package]
+name = "sample"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[dependencies]
+tefrung = { path = "../tefrung" }
+winit = "0.25"
+winit_input_helper = "0.10"
+pollster = "0.2"

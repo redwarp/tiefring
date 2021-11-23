@@ -1,0 +1,15 @@
+[package]
+name = "tefrung"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[dependencies]
+bytemuck = { version = "1.7", features = ["derive"] }
+raw-window-handle = "0.3"
+wgpu = "0.11"
+thiserror = "1.0"
+pixels = "0.8"
+cgmath = "0.18"
+image = "0.23"
+once_cell = "1.8"
