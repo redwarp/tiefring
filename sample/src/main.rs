@@ -1,4 +1,4 @@
-use tefrung::{Canvas, Color, Position};
+use tefrung::{Canvas, CanvasSettings, Color, Position};
 use winit::{
     dpi::LogicalSize,
     event::{Event, VirtualKeyCode},
@@ -28,11 +28,28 @@ fn main() {
 
     let mut canvas = {
         let window_size = window.inner_size();
-        pollster::block_on(Canvas::new(&window, window_size.width, window_size.height))
+        pollster::block_on(Canvas::new(
+            &window,
+            window_size.width,
+            window_size.height,
+            CanvasSettings::default(),
+        ))
     }
     .unwrap();
 
-    let sprite = canvas.load_sprite("sample/sprites/p1_jump.png").unwrap();
+    let sprites = find_folder::Search::ParentsThenKids(3, 3)
+        .for_folder("sample")
+        .unwrap();
+
+    let alien_1 = canvas
+        .load_sprite(sprites.join("sprites/p1_jump.png"))
+        .unwrap();
+    let alien_2 = canvas
+        .load_sprite(sprites.join("sprites/p2_front.png"))
+        .unwrap();
+    let alien_3 = canvas
+        .load_sprite(sprites.join("sprites/p3_stand.png"))
+        .unwrap();
 
     window.set_visible(true);
 
@@ -60,24 +77,27 @@ fn main() {
                             a: 0.5,
                         },
                     );
-                    graphics.draw_rect(
-                        [-75, -75, -50, -50],
-                        Color {
-                            r: 1.0,
-                            g: 1.0,
-                            b: 1.0,
-                            a: 0.75,
+                    graphics.draw_sprite(
+                        Position {
+                            left: 10.0,
+                            top: 100.0,
                         },
+                        &alien_1,
                     );
-                    for index in 0..100 {
-                        graphics.draw_sprite(
-                            Position {
-                                left: index as f32 * 10.0,
-                                top: index as f32 * 10.0,
-                            },
-                            &sprite,
-                        );
-                    }
+                    graphics.draw_sprite(
+                        Position {
+                            left: 77.0,
+                            top: 100.0,
+                        },
+                        &alien_2,
+                    );
+                    graphics.draw_sprite(
+                        Position {
+                            left: 144.0,
+                            top: 100.0,
+                        },
+                        &alien_3,
+                    );
                 })
                 .unwrap();
         }

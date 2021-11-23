@@ -1,7 +1,7 @@
 use cgmath::Matrix4;
 use wgpu::{util::DeviceExt, BindGroup, BindGroupLayout, Buffer};
 
-use crate::WgpuContext;
+use crate::{CanvasZero, WgpuContext};
 
 // We need this for Rust to store our data correctly for the shaders
 #[repr(C)]
@@ -30,9 +30,14 @@ pub struct Camera {
 }
 
 impl Camera {
-    pub(crate) fn new(wgpu_context: &WgpuContext, width: u32, height: u32) -> Self {
+    pub(crate) fn new(
+        wgpu_context: &WgpuContext,
+        width: u32,
+        height: u32,
+        canvas_zero: &CanvasZero,
+    ) -> Self {
         let camera_uniform = CameraUniform {
-            projection: Camera::projection_matrix(width, height).into(),
+            projection: Camera::projection_matrix(width, height, canvas_zero).into(),
         };
 
         let camera_buffer =
@@ -78,9 +83,15 @@ impl Camera {
         }
     }
 
-    pub(crate) fn resize(&mut self, wgpu_context: &WgpuContext, width: u32, height: u32) {
+    pub(crate) fn resize(
+        &mut self,
+        wgpu_context: &WgpuContext,
+        width: u32,
+        height: u32,
+        canvas_zero: &CanvasZero,
+    ) {
         let camera_uniform = CameraUniform {
-            projection: Camera::projection_matrix(width, height).into(),
+            projection: Camera::projection_matrix(width, height, &canvas_zero).into(),
         };
 
         let updated_camera_buffer =
@@ -108,16 +119,18 @@ impl Camera {
         wgpu_context.queue.submit(Some(encoder.finish()));
     }
 
-    fn projection_matrix(width: u32, height: u32) -> Matrix4<f32> {
-        // let projection = cgmath::ortho(0.0, width as f32, height as f32, 0.0, 0.0, 1.0);
-        let projection = cgmath::ortho(
-            (-(width as f32 / 2.0)).floor(),
-            (width as f32 / 2.0).ceil(),
-            (height as f32 / 2.0).ceil(),
-            (-(height as f32 / 2.0)).floor(),
-            0.0,
-            1.0,
-        );
+    fn projection_matrix(width: u32, height: u32, canvas_zero: &CanvasZero) -> Matrix4<f32> {
+        let projection = match canvas_zero {
+            CanvasZero::Centered => cgmath::ortho(
+                (-(width as f32 / 2.0)).floor(),
+                (width as f32 / 2.0).ceil(),
+                (height as f32 / 2.0).ceil(),
+                (-(height as f32 / 2.0)).floor(),
+                0.0,
+                1.0,
+            ),
+            CanvasZero::TopLeft => cgmath::ortho(0.0, width as f32, height as f32, 0.0, 0.0, 1.0),
+        };
 
         return OPENGL_TO_WGPU_MATRIX * projection;
     }

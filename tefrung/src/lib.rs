@@ -2,8 +2,8 @@ use std::{cell::RefCell, path::Path, rc::Rc};
 
 use camera::Camera;
 use raw_window_handle::HasRawWindowHandle;
-use renderer::{ColorRenderer, TextureRenderer};
-use sprite::{Sprite, TextureId, TextureRepository};
+use renderer::ColorRenderer;
+use sprite::{Sprite, TextureId, TextureRenderer, TextureRepository};
 use thiserror::Error;
 
 pub use wgpu::Color;
@@ -29,16 +29,22 @@ pub struct Canvas {
     texture_renderer: TextureRenderer,
     camera: Camera,
     texture_repository: Rc<RefCell<TextureRepository>>,
+    pub(crate) canvas_settings: CanvasSettings,
 }
 
 impl Canvas {
-    pub async fn new<W>(window: &W, width: u32, height: u32) -> Result<Canvas, Error>
+    pub async fn new<W>(
+        window: &W,
+        width: u32,
+        height: u32,
+        canvas_settings: CanvasSettings,
+    ) -> Result<Canvas, Error>
     where
         W: HasRawWindowHandle,
     {
         let wgpu_context = WgpuContext::new(window, width, height).await?;
         let graphics = Graphics::new();
-        let camera = Camera::new(&wgpu_context, width, height);
+        let camera = Camera::new(&wgpu_context, width, height, &canvas_settings.canvas_zero);
         let color_renderer = ColorRenderer::new(&wgpu_context, &camera);
         let texture_renderer = TextureRenderer::new(&wgpu_context, &camera);
         let texture_repository = Rc::new(RefCell::new(TextureRepository::new()));
@@ -49,6 +55,7 @@ impl Canvas {
             texture_renderer,
             camera,
             texture_repository,
+            canvas_settings,
         })
     }
 
@@ -103,7 +110,12 @@ impl Canvas {
 
     pub fn resize(&mut self, width: u32, height: u32) {
         self.wgpu_context.resize(width, height);
-        self.camera.resize(&self.wgpu_context, width, height);
+        self.camera.resize(
+            &self.wgpu_context,
+            width,
+            height,
+            &self.canvas_settings.canvas_zero,
+        );
     }
 
     pub fn load_sprite<P: AsRef<Path>>(&mut self, path: P) -> Option<Sprite> {
@@ -128,6 +140,30 @@ impl Canvas {
         self.graphics.draw_rect_operations.clear();
         self.graphics.draw_texture_operations.clear();
     }
+}
+
+pub struct CanvasSettings {
+    pub background_color: Color,
+    pub canvas_zero: CanvasZero,
+}
+
+impl Default for CanvasSettings {
+    fn default() -> Self {
+        Self {
+            background_color: Color {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            },
+            canvas_zero: CanvasZero::TopLeft,
+        }
+    }
+}
+
+pub enum CanvasZero {
+    TopLeft,
+    Centered,
 }
 
 pub struct Graphics {
@@ -267,8 +303,8 @@ impl WgpuContext {
             format: surface
                 .get_preferred_format(&adapter)
                 .ok_or(Error::InitializationFailed)?,
-            width: width,
-            height: height,
+            width,
+            height,
             present_mode: wgpu::PresentMode::Fifo,
         };
         surface.configure(&device, &config);

@@ -1,8 +1,11 @@
-use std::{cell::RefCell, collections::HashMap, fs::File, path::Path, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, path::Path, rc::Rc};
 
-use wgpu::{BindGroup, RenderPipeline};
+use wgpu::{
+    util::DeviceExt, BindGroup, BindGroupLayout, Buffer, PipelineLayout, RenderPass,
+    RenderPipeline, Sampler, ShaderModule,
+};
 
-use crate::{renderer::TextureVertex, Canvas, Rect, Size};
+use crate::{camera::Camera, Canvas, DrawTextureOperation, Rect, Size, WgpuContext};
 
 pub struct Sprite {
     pub(crate) texture_id: TextureId,
@@ -192,6 +195,35 @@ impl Texture {
     }
 }
 
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub(crate) struct TextureVertex {
+    position: [f32; 2],
+    tex_coords: [f32; 2],
+}
+
+impl TextureVertex {
+    pub(crate) fn description<'a>() -> wgpu::VertexBufferLayout<'a> {
+        use std::mem;
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<TextureVertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x2, // NEW!
+                },
+            ],
+        }
+    }
+}
+
 pub(crate) struct TextureRepository {
     next_id: u32,
     textures: HashMap<TextureId, Rc<Texture>>,
@@ -218,7 +250,7 @@ impl TextureRepository {
         texture_id
     }
 
-    pub(crate) fn get_texture(&self, texture_id: &TextureId) -> Option<Rc<Texture>> {
+    fn get_texture(&self, texture_id: &TextureId) -> Option<Rc<Texture>> {
         self.textures.get(texture_id).map(|texture| texture.clone())
     }
 
@@ -230,6 +262,154 @@ impl TextureRepository {
                 self.use_count.remove(texture_id);
                 self.textures.remove(texture_id);
             }
+        }
+    }
+}
+
+pub(crate) struct TextureRenderer {
+    shader: ShaderModule,
+    sampler: Sampler,
+    texture_bind_group_layout: BindGroupLayout,
+    render_pipeline_layout: PipelineLayout,
+    index_buffer: Buffer,
+    vertex_buffer: Vec<(Buffer, Rc<Texture>)>,
+}
+
+impl TextureRenderer {
+    pub(crate) fn new(context: &WgpuContext, camera: &Camera) -> Self {
+        let shader = context
+            .device
+            .create_shader_module(&wgpu::ShaderModuleDescriptor {
+                label: Some("Shader"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("shaders/texture.wgsl").into()),
+            });
+
+        let texture_bind_group_layout =
+            context
+                .device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                multisampled: false,
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler {
+                                // This is only for TextureSampleType::Depth
+                                comparison: false,
+                                // This should be true if the sample_type of the texture is:
+                                //     TextureSampleType::Float { filterable: true }
+                                // Otherwise you'll get an error.
+                                filtering: true,
+                            },
+                            count: None,
+                        },
+                    ],
+                    label: Some("texture_bind_group_layout"),
+                });
+
+        let render_pipeline_layout =
+            context
+                .device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("Texture Render Pipeline Layout"),
+                    bind_group_layouts: &[
+                        &camera.camera_bind_group_layout,
+                        &texture_bind_group_layout,
+                    ],
+                    push_constant_ranges: &[],
+                });
+
+        let sampler = context.device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
+        let indices: [u16; 6] = [0, 1, 2, 2, 3, 0];
+        let index_buffer = context
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(&indices[..]),
+                usage: wgpu::BufferUsages::INDEX,
+            });
+
+        TextureRenderer {
+            shader,
+            sampler,
+            texture_bind_group_layout,
+            render_pipeline_layout,
+            index_buffer,
+            vertex_buffer: vec![],
+        }
+    }
+
+    pub(crate) fn render<'a>(
+        &'a mut self,
+        render_pass: &mut RenderPass<'a>,
+        context: &'a WgpuContext,
+        texture_repository: &Rc<RefCell<TextureRepository>>,
+        camera: &'a Camera,
+        operations: &[DrawTextureOperation],
+    ) {
+        self.vertex_buffer.clear();
+        for operation in operations {
+            let vertices = [
+                TextureVertex {
+                    position: [operation.destination.left, operation.destination.top],
+                    tex_coords: [operation.tex_coords.left, operation.tex_coords.top],
+                },
+                TextureVertex {
+                    position: [operation.destination.left, operation.destination.bottom],
+                    tex_coords: [operation.tex_coords.left, operation.tex_coords.bottom],
+                },
+                TextureVertex {
+                    position: [operation.destination.right, operation.destination.bottom],
+                    tex_coords: [operation.tex_coords.right, operation.tex_coords.bottom],
+                },
+                TextureVertex {
+                    position: [operation.destination.right, operation.destination.top],
+                    tex_coords: [operation.tex_coords.right, operation.tex_coords.top],
+                },
+            ];
+
+            let vertex_buffer =
+                context
+                    .device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("Vertex Buffer"),
+                        contents: bytemuck::cast_slice(&vertices[..]),
+                        usage: wgpu::BufferUsages::VERTEX,
+                    });
+
+            let texture = texture_repository
+                .borrow()
+                .get_texture(&operation.texture_id);
+            if let Some(texture) = texture {
+                self.vertex_buffer.push((vertex_buffer, texture));
+            }
+        }
+
+        for (vertex_buffer, texture) in &self.vertex_buffer {
+            render_pass.set_pipeline(&texture.render_pipeline);
+            render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);
+            render_pass.set_bind_group(1, &texture.texture_bind_group, &[]);
+            render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.draw_indexed(0..6, 0, 0..1);
         }
     }
 }
