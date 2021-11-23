@@ -1,5 +1,3 @@
-use std::{cell::RefCell, rc::Rc};
-
 use tefrung::{Canvas, Color, Position};
 use winit::{
     dpi::LogicalSize,

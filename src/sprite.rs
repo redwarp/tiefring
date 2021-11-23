@@ -64,8 +64,6 @@ impl Sprite {
 pub(crate) struct TextureId(u32);
 
 pub(crate) struct Texture {
-    pub wgpu_texture: wgpu::Texture,
-    pub texture_view: wgpu::TextureView,
     pub size: Size,
     pub texture_bind_group: BindGroup,
     pub render_pipeline: RenderPipeline,
@@ -181,8 +179,6 @@ impl Texture {
                 });
 
         let texture = Texture {
-            wgpu_texture,
-            texture_view,
             size,
             texture_bind_group,
             render_pipeline,
