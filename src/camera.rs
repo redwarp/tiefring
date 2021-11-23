@@ -109,12 +109,12 @@ impl Camera {
     }
 
     fn projection_matrix(width: u32, height: u32) -> Matrix4<f32> {
-        let projection = cgmath::ortho(0.0, width as f32, height as f32, 0.0, 0.0, 1.0);
+        // let projection = cgmath::ortho(0.0, width as f32, height as f32, 0.0, 0.0, 1.0);
         let projection = cgmath::ortho(
-            -(width as f32 / 2.0),
-            width as f32 / 2.0,
-            height as f32 / 2.0,
-            -(height as f32 / 2.0),
+            (-(width as f32 / 2.0)).floor(),
+            (width as f32 / 2.0).ceil(),
+            (height as f32 / 2.0).ceil(),
+            (-(height as f32 / 2.0)).floor(),
             0.0,
             1.0,
         );

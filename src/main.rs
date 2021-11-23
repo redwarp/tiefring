@@ -71,13 +71,15 @@ fn main() {
                             a: 0.75,
                         },
                     );
-                    graphics.draw_sprite(
-                        Position {
-                            left: 0.0,
-                            top: 0.0,
-                        },
-                        &sprite,
-                    )
+                    for index in 0..100 {
+                        graphics.draw_sprite(
+                            Position {
+                                left: index as f32 * 10.0,
+                                top: index as f32 * 10.0,
+                            },
+                            &sprite,
+                        );
+                    }
                 })
                 .unwrap();
         }

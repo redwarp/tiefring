@@ -6,9 +6,7 @@ use wgpu::{
 };
 
 use crate::{
-    camera::{self, Camera},
-    sprite::{TextureId, TextureRepository},
-    DrawRectOperation, DrawTextureOperation, WgpuContext,
+    camera::Camera, sprite::TextureRepository, DrawRectOperation, DrawTextureOperation, WgpuContext,
 };
 
 #[repr(C)]
@@ -221,7 +219,8 @@ pub struct TextureRenderer {
     sampler: Sampler,
     texture_bind_group_layout: BindGroupLayout,
     render_pipeline_layout: PipelineLayout,
-    vertex_buffer: Vec<(Buffer, Buffer, RenderPipeline, BindGroup)>,
+    index_buffer: Buffer,
+    vertex_buffer: Vec<(Buffer, RenderPipeline, BindGroup)>,
 }
 
 impl TextureRenderer {
@@ -287,11 +286,21 @@ impl TextureRenderer {
             ..Default::default()
         });
 
+        let indices: [u16; 6] = [0, 1, 2, 2, 3, 0];
+        let index_buffer = context
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(&indices[..]),
+                usage: wgpu::BufferUsages::INDEX,
+            });
+
         TextureRenderer {
             shader,
             sampler,
             texture_bind_group_layout,
             render_pipeline_layout,
+            index_buffer,
             vertex_buffer: vec![],
         }
     }
@@ -324,7 +333,6 @@ impl TextureRenderer {
                     tex_coords: [operation.tex_coords.right, operation.tex_coords.top],
                 },
             ];
-            let indices: [u16; 6] = [0, 1, 2, 2, 3, 0];
 
             let vertex_buffer =
                 context
@@ -333,14 +341,6 @@ impl TextureRenderer {
                         label: Some("Vertex Buffer"),
                         contents: bytemuck::cast_slice(&vertices[..]),
                         usage: wgpu::BufferUsages::VERTEX,
-                    });
-            let index_buffer =
-                context
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Index Buffer"),
-                        contents: bytemuck::cast_slice(&indices[..]),
-                        usage: wgpu::BufferUsages::INDEX,
                     });
 
             let texture = texture_repository
@@ -409,23 +409,17 @@ impl TextureRenderer {
                             },
                         });
 
-                self.vertex_buffer.push((
-                    vertex_buffer,
-                    index_buffer,
-                    render_pipeline,
-                    texture_bind_group,
-                ));
+                self.vertex_buffer
+                    .push((vertex_buffer, render_pipeline, texture_bind_group));
             }
         }
 
-        for (vertex_buffer, index_buffer, render_pipeline, texture_bind_group) in
-            &self.vertex_buffer
-        {
-            render_pass.set_pipeline(render_pipeline);
+        for (vertex_buffer, render_pipeline, texture_bind_group) in &self.vertex_buffer {
+            render_pass.set_pipeline(&render_pipeline);
             render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);
             render_pass.set_bind_group(1, &texture_bind_group, &[]);
             render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-            render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..6, 0, 0..1);
         }
     }
