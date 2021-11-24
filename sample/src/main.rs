@@ -11,8 +11,6 @@ const WIDTH: u32 = 640;
 const HEIGHT: u32 = 480;
 
 fn main() {
-    println!("Hello, world!");
-
     let event_loop = EventLoop::new();
     let mut input = WinitInputHelper::new();
     let window = {
@@ -86,28 +84,28 @@ fn main() {
                         },
                     );
                     graphics.draw_sprite(
+                        &alien_1,
                         Position {
                             left: 10.0,
                             top: 100.0,
                         },
-                        &alien_1,
                     );
                     graphics.draw_sprite(
+                        &alien_2,
                         Position {
                             left: 77.0,
                             top: 100.0,
                         },
-                        &alien_2,
                     );
                     graphics.draw_sprite(
+                        &alien_3,
                         Position {
                             left: 144.0,
                             top: 100.0,
                         },
-                        &alien_3,
                     );
                     graphics.draw_rect(
-                        [0, 160, 200, 300],
+                        [0, 160, 240, 280],
                         Color {
                             r: 0.1,
                             g: 0.2,
@@ -115,12 +113,13 @@ fn main() {
                             a: 1.0,
                         },
                     );
+                    graphics.draw_sprite_in_rect(&alien_1, [211, 100, 345, 288]);
                     graphics.draw_sprite(
+                        &alien_1,
                         Position {
                             left: 150.0,
                             top: 200.0,
                         },
-                        &alien_1,
                     );
                 })
                 .unwrap();

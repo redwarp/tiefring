@@ -192,15 +192,20 @@ impl Graphics {
             .push(DrawRectOperation(index, rect.into(), color));
     }
 
-    pub fn draw_sprite(&mut self, position: Position, sprite: &Sprite) {
-        let index = self.next_index(OperationType::DrawTexture(sprite.texture_id));
-        let tex_coords = sprite.tex_coords;
+    pub fn draw_sprite(&mut self, sprite: &Sprite, position: Position) {
         let destination = Rect {
             left: position.left,
             top: position.top,
             right: position.left + sprite.rect.width(),
             bottom: position.top + sprite.rect.height(),
         };
+        self.draw_sprite_in_rect(sprite, destination);
+    }
+
+    pub fn draw_sprite_in_rect<R: Into<Rect>>(&mut self, sprite: &Sprite, rect: R) {
+        let index = self.next_index(OperationType::DrawTexture(sprite.texture_id));
+        let tex_coords = sprite.tex_coords;
+        let destination = rect.into();
         let texture_id = sprite.texture_id;
         self.draw_texture_operations.push(DrawTextureOperation {
             index,
