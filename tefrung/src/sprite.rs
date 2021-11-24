@@ -5,7 +5,9 @@ use wgpu::{
     RenderPipeline, Sampler, ShaderModule,
 };
 
-use crate::{camera::Camera, Canvas, DrawTextureOperation, Rect, Size, WgpuContext};
+use crate::{
+    camera::Camera, renderer, Canvas, DepthTexture, DrawTextureOperation, Rect, Size, WgpuContext,
+};
 
 pub struct Sprite {
     pub(crate) texture_id: TextureId,
@@ -178,7 +180,13 @@ impl Texture {
                         // Requires Features::CONSERVATIVE_RASTERIZATION
                         conservative: false,
                     },
-                    depth_stencil: None, // 1.
+                    depth_stencil: Some(wgpu::DepthStencilState {
+                        format: DepthTexture::DEPTH_FORMAT,
+                        depth_write_enabled: true,
+                        depth_compare: wgpu::CompareFunction::GreaterEqual, // 1.
+                        stencil: wgpu::StencilState::default(),             // 2.
+                        bias: wgpu::DepthBiasState::default(),
+                    }),
                     multisample: wgpu::MultisampleState {
                         count: 1,                         // 2.
                         mask: !0,                         // 3.
@@ -198,7 +206,7 @@ impl Texture {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub(crate) struct TextureVertex {
-    position: [f32; 2],
+    position: [f32; 3],
     tex_coords: [f32; 2],
 }
 
@@ -212,10 +220,10 @@ impl TextureVertex {
                 wgpu::VertexAttribute {
                     offset: 0,
                     shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x2,
+                    format: wgpu::VertexFormat::Float32x3,
                 },
                 wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
+                    offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
                     shader_location: 1,
                     format: wgpu::VertexFormat::Float32x2, // NEW!
                 },
@@ -367,21 +375,34 @@ impl TextureRenderer {
     ) {
         self.vertex_buffer.clear();
         for operation in operations {
+            let depth = renderer::depth(operation.index);
             let vertices = [
                 TextureVertex {
-                    position: [operation.destination.left, operation.destination.top],
+                    position: [operation.destination.left, operation.destination.top, depth],
                     tex_coords: [operation.tex_coords.left, operation.tex_coords.top],
                 },
                 TextureVertex {
-                    position: [operation.destination.left, operation.destination.bottom],
+                    position: [
+                        operation.destination.left,
+                        operation.destination.bottom,
+                        depth,
+                    ],
                     tex_coords: [operation.tex_coords.left, operation.tex_coords.bottom],
                 },
                 TextureVertex {
-                    position: [operation.destination.right, operation.destination.bottom],
+                    position: [
+                        operation.destination.right,
+                        operation.destination.bottom,
+                        depth,
+                    ],
                     tex_coords: [operation.tex_coords.right, operation.tex_coords.bottom],
                 },
                 TextureVertex {
-                    position: [operation.destination.right, operation.destination.top],
+                    position: [
+                        operation.destination.right,
+                        operation.destination.top,
+                        depth,
+                    ],
                     tex_coords: [operation.tex_coords.right, operation.tex_coords.top],
                 },
             ];

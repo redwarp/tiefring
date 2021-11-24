@@ -129,7 +129,9 @@ impl Camera {
                 0.0,
                 1.0,
             ),
-            CanvasZero::TopLeft => cgmath::ortho(0.0, width as f32, height as f32, 0.0, 0.0, 1.0),
+            CanvasZero::TopLeft => {
+                cgmath::ortho(0.0, width as f32, height as f32, 0.0, -100.0, 100.0)
+            }
         };
 
         return OPENGL_TO_WGPU_MATRIX * projection;

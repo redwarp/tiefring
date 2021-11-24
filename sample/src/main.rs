@@ -32,7 +32,15 @@ fn main() {
             &window,
             window_size.width,
             window_size.height,
-            CanvasSettings::default(),
+            CanvasSettings {
+                background_color: Color {
+                    r: 0.3,
+                    g: 0.2,
+                    b: 0.4,
+                    a: 1.0,
+                },
+                ..Default::default()
+            },
         ))
     }
     .unwrap();
@@ -97,6 +105,15 @@ fn main() {
                             top: 100.0,
                         },
                         &alien_3,
+                    );
+                    graphics.draw_rect(
+                        [0, 160, 200, 300],
+                        Color {
+                            r: 0.1,
+                            g: 0.2,
+                            b: 0.3,
+                            a: 1.0,
+                        },
                     );
                 })
                 .unwrap();

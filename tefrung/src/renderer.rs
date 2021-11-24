@@ -1,11 +1,11 @@
 use wgpu::{util::DeviceExt, Buffer, Color, RenderPass, RenderPipeline};
 
-use crate::{camera::Camera, DrawRectOperation, WgpuContext};
+use crate::{camera::Camera, DepthTexture, DrawRectOperation, WgpuContext};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct ColorVertex {
-    position: [f32; 2],
+    position: [f32; 3],
     color: [f32; 4],
 }
 
@@ -18,10 +18,10 @@ impl ColorVertex {
                 wgpu::VertexAttribute {
                     offset: 0,
                     shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x2,
+                    format: wgpu::VertexFormat::Float32x3,
                 },
                 wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
+                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
                     shader_location: 1,
                     format: wgpu::VertexFormat::Float32x4,
                 },
@@ -96,7 +96,13 @@ impl ColorRenderer {
                         // Requires Features::CONSERVATIVE_RASTERIZATION
                         conservative: false,
                     },
-                    depth_stencil: None, // 1.
+                    depth_stencil: Some(wgpu::DepthStencilState {
+                        format: DepthTexture::DEPTH_FORMAT,
+                        depth_write_enabled: true,
+                        depth_compare: wgpu::CompareFunction::GreaterEqual, // 1.
+                        stencil: wgpu::StencilState::default(),             // 2.
+                        bias: wgpu::DepthBiasState::default(),
+                    }),
                     multisample: wgpu::MultisampleState {
                         count: 1,                         // 2.
                         mask: !0,                         // 3.
@@ -119,24 +125,24 @@ impl ColorRenderer {
     ) {
         let vertices: Vec<_> = operations
             .iter()
-            .flat_map(|operation| {
-                let rect = &operation.0;
-                let color: [f32; 4] = color_to_float_array(operation.1);
+            .flat_map(|&DrawRectOperation(index, rect, color)| {
+                let color: [f32; 4] = color_to_float_array(color);
+                let depth = depth(index);
                 [
                     ColorVertex {
-                        position: [rect.left as f32, rect.top as f32],
+                        position: [rect.left as f32, rect.top as f32, depth],
                         color: color,
                     },
                     ColorVertex {
-                        position: [rect.left as f32, rect.bottom as f32],
+                        position: [rect.left as f32, rect.bottom as f32, depth],
                         color: color,
                     },
                     ColorVertex {
-                        position: [rect.right as f32, rect.bottom as f32],
+                        position: [rect.right as f32, rect.bottom as f32, depth],
                         color: color,
                     },
                     ColorVertex {
-                        position: [rect.right as f32, rect.top as f32],
+                        position: [rect.right as f32, rect.top as f32, depth],
                         color: color,
                     },
                 ]
@@ -176,4 +182,9 @@ impl ColorRenderer {
             render_pass.draw_indexed(0..count, 0, 0..1);
         }
     }
+}
+
+pub(crate) fn depth(index: u16) -> f32 {
+    let depth = 1.0 - (index as f32 / 0xffff as f32);
+    depth
 }

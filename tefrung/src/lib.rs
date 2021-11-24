@@ -7,7 +7,7 @@ use sprite::{Sprite, TextureId, TextureRenderer, TextureRepository};
 use thiserror::Error;
 
 pub use wgpu::Color;
-use wgpu::{CommandEncoder, RenderPass, SurfaceError};
+use wgpu::{CommandEncoder, RenderPass, Sampler, SurfaceError, Texture, TextureView};
 
 mod camera;
 mod renderer;
@@ -81,27 +81,31 @@ impl Canvas {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Render Pass"),
-            color_attachments: &[wgpu::RenderPassColorAttachment {
-                view: &view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.1,
-                        g: 0.3,
-                        b: 0.3,
-                        a: 1.0,
+        {
+            let depth_view = self.wgpu_context.depth_texture.view.clone();
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Render Pass"),
+                color_attachments: &[wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(self.canvas_settings.background_color),
+                        store: true,
+                    },
+                }],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(-100.0),
+                        store: true,
                     }),
-                    store: true,
-                },
-            }],
-            depth_stencil_attachment: None,
-        });
+                    stencil_ops: None,
+                }),
+            });
 
-        self.handle_draw_operations(&mut render_pass);
+            self.handle_draw_operations(&mut render_pass);
+        }
 
-        drop(render_pass);
         self.wgpu_context.queue.submit(Some(encoder.finish()));
         surface_texture.present();
 
@@ -137,8 +141,7 @@ impl Canvas {
             &self.graphics.draw_texture_operations,
         );
 
-        self.graphics.draw_rect_operations.clear();
-        self.graphics.draw_texture_operations.clear();
+        self.graphics.reset();
     }
 }
 
@@ -167,6 +170,8 @@ pub enum CanvasZero {
 }
 
 pub struct Graphics {
+    index: u16,
+    previous_operation: Option<OperationType>,
     draw_rect_operations: Vec<DrawRectOperation>,
     draw_texture_operations: Vec<DrawTextureOperation>,
 }
@@ -174,17 +179,21 @@ pub struct Graphics {
 impl Graphics {
     fn new() -> Self {
         Graphics {
+            index: 0,
+            previous_operation: None,
             draw_rect_operations: vec![],
             draw_texture_operations: vec![],
         }
     }
 
     pub fn draw_rect<R: Into<Rect>>(&mut self, rect: R, color: Color) {
+        let index = self.next_index(OperationType::DrawRect);
         self.draw_rect_operations
-            .push(DrawRectOperation(rect.into(), color));
+            .push(DrawRectOperation(index, rect.into(), color));
     }
 
     pub fn draw_sprite(&mut self, position: Position, sprite: &Sprite) {
+        let index = self.next_index(OperationType::DrawTexture(sprite.texture_id));
         let tex_coords = sprite.tex_coords;
         let destination = Rect {
             left: position.left,
@@ -194,16 +203,40 @@ impl Graphics {
         };
         let texture_id = sprite.texture_id;
         self.draw_texture_operations.push(DrawTextureOperation {
+            index,
             tex_coords,
             destination,
             texture_id,
         });
     }
+
+    pub fn reset(&mut self) {
+        self.index = 0;
+        self.draw_rect_operations.clear();
+        self.draw_texture_operations.clear();
+    }
+
+    fn next_index(&mut self, current_operation: OperationType) -> u16 {
+        if let Some(previous_operation) = &self.previous_operation {
+            if previous_operation != &current_operation {
+                self.index += 1;
+            }
+        }
+        self.previous_operation = Some(current_operation);
+        self.index
+    }
 }
 
-pub(crate) struct DrawRectOperation(Rect, Color);
+#[derive(PartialEq)]
+enum OperationType {
+    DrawRect,
+    DrawTexture(TextureId),
+}
+
+pub(crate) struct DrawRectOperation(u16, Rect, Color);
 
 pub(crate) struct DrawTextureOperation {
+    pub index: u16,
     pub tex_coords: Rect,
     pub destination: Rect,
     pub texture_id: TextureId,
@@ -268,6 +301,7 @@ struct WgpuContext {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     size: Size,
+    depth_texture: DepthTexture,
 }
 
 impl WgpuContext {
@@ -311,12 +345,15 @@ impl WgpuContext {
 
         let size = Size { width, height };
 
+        let depth_texture = DepthTexture::create_depth_texture(&device, &config, "depth_texture");
+
         Ok(WgpuContext {
             surface,
             device,
             config,
             queue,
             size,
+            depth_texture,
         })
     }
 
@@ -325,14 +362,62 @@ impl WgpuContext {
         self.config.width = width;
         self.config.height = height;
         self.surface.configure(&self.device, &self.config);
+        self.depth_texture =
+            DepthTexture::create_depth_texture(&self.device, &self.config, "depth_texture");
     }
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
+struct DepthTexture {
+    texture: Texture,
+    view: Rc<TextureView>,
+    sampler: Sampler,
+}
+
+impl DepthTexture {
+    pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
+    pub fn create_depth_texture(
+        device: &wgpu::Device,
+        config: &wgpu::SurfaceConfiguration,
+        label: &str,
+    ) -> Self {
+        let size = wgpu::Extent3d {
+            // 2.
+            width: config.width,
+            height: config.height,
+            depth_or_array_layers: 1,
+        };
+        let desc = wgpu::TextureDescriptor {
+            label: Some(label),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: Self::DEPTH_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT // 3.
+                | wgpu::TextureUsages::TEXTURE_BINDING,
+        };
+        let texture = device.create_texture(&desc);
+
+        let view = Rc::new(texture.create_view(&wgpu::TextureViewDescriptor::default()));
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            // 4.
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            compare: Some(wgpu::CompareFunction::LessEqual), // 5.
+            lod_min_clamp: -100.0,
+            lod_max_clamp: 100.0,
+            ..Default::default()
+        });
+
+        Self {
+            texture,
+            view,
+            sampler,
+        }
     }
 }
