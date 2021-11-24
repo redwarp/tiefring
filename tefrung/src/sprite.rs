@@ -1,5 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, path::Path, rc::Rc};
 
+use itertools::Itertools;
 use wgpu::{
     util::DeviceExt, BindGroup, BindGroupLayout, Buffer, PipelineLayout, RenderPass,
     RenderPipeline, Sampler, ShaderModule,
@@ -70,7 +71,7 @@ impl Sprite {
     }
 }
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(PartialEq, Eq, PartialOrd, Hash, Clone, Copy)]
 pub(crate) struct TextureId(u32);
 
 pub(crate) struct Texture {
@@ -279,8 +280,7 @@ pub(crate) struct TextureRenderer {
     sampler: Sampler,
     texture_bind_group_layout: BindGroupLayout,
     render_pipeline_layout: PipelineLayout,
-    index_buffer: Buffer,
-    vertex_buffer: Vec<(Buffer, Rc<Texture>)>,
+    vertex_buffer: Vec<(Buffer, Rc<Texture>, Vec<u16>, Buffer)>,
 }
 
 impl TextureRenderer {
@@ -346,21 +346,11 @@ impl TextureRenderer {
             ..Default::default()
         });
 
-        let indices: [u16; 6] = [0, 1, 2, 2, 3, 0];
-        let index_buffer = context
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Index Buffer"),
-                contents: bytemuck::cast_slice(&indices[..]),
-                usage: wgpu::BufferUsages::INDEX,
-            });
-
         TextureRenderer {
             shader,
             sampler,
             texture_bind_group_layout,
             render_pipeline_layout,
-            index_buffer,
             vertex_buffer: vec![],
         }
     }
@@ -371,66 +361,98 @@ impl TextureRenderer {
         context: &'a WgpuContext,
         texture_repository: &Rc<RefCell<TextureRepository>>,
         camera: &'a Camera,
-        operations: &[DrawTextureOperation],
+        operations: &Vec<DrawTextureOperation>,
     ) {
         self.vertex_buffer.clear();
-        for operation in operations {
-            let depth = renderer::depth(operation.index);
-            let vertices = [
-                TextureVertex {
-                    position: [operation.destination.left, operation.destination.top, depth],
-                    tex_coords: [operation.tex_coords.left, operation.tex_coords.top],
-                },
-                TextureVertex {
-                    position: [
-                        operation.destination.left,
-                        operation.destination.bottom,
-                        depth,
-                    ],
-                    tex_coords: [operation.tex_coords.left, operation.tex_coords.bottom],
-                },
-                TextureVertex {
-                    position: [
-                        operation.destination.right,
-                        operation.destination.bottom,
-                        depth,
-                    ],
-                    tex_coords: [operation.tex_coords.right, operation.tex_coords.bottom],
-                },
-                TextureVertex {
-                    position: [
-                        operation.destination.right,
-                        operation.destination.top,
-                        depth,
-                    ],
-                    tex_coords: [operation.tex_coords.right, operation.tex_coords.top],
-                },
-            ];
+        let sorted_op = operations.iter().into_group_map_by(|op| op.texture_id);
+        for key in sorted_op.keys() {
+            if let Some(operations) = sorted_op.get(key) {
+                let vertices: Vec<_> = operations
+                    .iter()
+                    .flat_map(|operation| {
+                        let depth = renderer::depth(operation.index);
+                        [
+                            TextureVertex {
+                                position: [
+                                    operation.destination.left,
+                                    operation.destination.top,
+                                    depth,
+                                ],
+                                tex_coords: [operation.tex_coords.left, operation.tex_coords.top],
+                            },
+                            TextureVertex {
+                                position: [
+                                    operation.destination.left,
+                                    operation.destination.bottom,
+                                    depth,
+                                ],
+                                tex_coords: [
+                                    operation.tex_coords.left,
+                                    operation.tex_coords.bottom,
+                                ],
+                            },
+                            TextureVertex {
+                                position: [
+                                    operation.destination.right,
+                                    operation.destination.bottom,
+                                    depth,
+                                ],
+                                tex_coords: [
+                                    operation.tex_coords.right,
+                                    operation.tex_coords.bottom,
+                                ],
+                            },
+                            TextureVertex {
+                                position: [
+                                    operation.destination.right,
+                                    operation.destination.top,
+                                    depth,
+                                ],
+                                tex_coords: [operation.tex_coords.right, operation.tex_coords.top],
+                            },
+                        ]
+                    })
+                    .collect();
 
-            let vertex_buffer =
-                context
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Vertex Buffer"),
-                        contents: bytemuck::cast_slice(&vertices[..]),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+                let indices: Vec<u16> = (0..operations.len())
+                    .flat_map(|index| {
+                        let step: u16 = index as u16 * 4;
+                        [step + 0, step + 1, step + 2, step + 2, step + 3, step + 0]
+                    })
+                    .collect();
 
-            let texture = texture_repository
-                .borrow()
-                .get_texture(&operation.texture_id);
-            if let Some(texture) = texture {
-                self.vertex_buffer.push((vertex_buffer, texture));
+                let texture = texture_repository.borrow().get_texture(key);
+                if let Some(texture) = texture {
+                    let vertex_buffer =
+                        context
+                            .device
+                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                label: Some("Vertex Buffer"),
+                                contents: bytemuck::cast_slice(&vertices[..]),
+                                usage: wgpu::BufferUsages::VERTEX,
+                            });
+                    let index_buffer =
+                        context
+                            .device
+                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                label: Some("Index Buffer"),
+                                contents: bytemuck::cast_slice(&indices[..]),
+                                usage: wgpu::BufferUsages::INDEX,
+                            });
+                    self.vertex_buffer
+                        .push((vertex_buffer, texture, indices, index_buffer));
+                }
             }
         }
 
-        for (vertex_buffer, texture) in &self.vertex_buffer {
+        for (vertex_buffer, texture, indices, index_buffer) in &self.vertex_buffer {
+            let indice_count = indices.len() as u32;
             render_pass.set_pipeline(&texture.render_pipeline);
             render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);
             render_pass.set_bind_group(1, &texture.texture_bind_group, &[]);
             render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..6, 0, 0..1);
+            render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.draw_indexed(0..indice_count, 0, 0..1);
         }
     }
 }

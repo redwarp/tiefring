@@ -115,6 +115,13 @@ fn main() {
                             a: 1.0,
                         },
                     );
+                    graphics.draw_sprite(
+                        Position {
+                            left: 150.0,
+                            top: 200.0,
+                        },
+                        &alien_1,
+                    );
                 })
                 .unwrap();
         }

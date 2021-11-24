@@ -138,7 +138,7 @@ impl Canvas {
             &self.wgpu_context,
             &self.texture_repository,
             &self.camera,
-            &self.graphics.draw_texture_operations,
+            &mut self.graphics.draw_texture_operations,
         );
 
         self.graphics.reset();
