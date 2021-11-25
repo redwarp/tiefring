@@ -3,11 +3,11 @@ use std::{cell::RefCell, path::Path, rc::Rc};
 use camera::Camera;
 use raw_window_handle::HasRawWindowHandle;
 use renderer::ColorRenderer;
-use sprite::{Sprite, TextureId, TextureRenderer, TextureRepository};
+use sprite::{Sprite, Texture, TextureId, TextureRenderer};
 use thiserror::Error;
 
 pub use wgpu::Color;
-use wgpu::{CommandEncoder, RenderPass, Sampler, SurfaceError, Texture, TextureView};
+use wgpu::{CommandEncoder, RenderPass, Sampler, SurfaceError, TextureView};
 
 mod camera;
 mod renderer;
@@ -28,7 +28,6 @@ pub struct Canvas {
     color_renderer: ColorRenderer,
     texture_renderer: TextureRenderer,
     camera: Camera,
-    texture_repository: Rc<RefCell<TextureRepository>>,
     pub(crate) canvas_settings: CanvasSettings,
 }
 
@@ -47,14 +46,12 @@ impl Canvas {
         let camera = Camera::new(&wgpu_context, width, height, &canvas_settings.canvas_zero);
         let color_renderer = ColorRenderer::new(&wgpu_context, &camera);
         let texture_renderer = TextureRenderer::new(&wgpu_context, &camera);
-        let texture_repository = Rc::new(RefCell::new(TextureRepository::new()));
         Ok(Canvas {
             wgpu_context,
             graphics,
             color_renderer,
             texture_renderer,
             camera,
-            texture_repository,
             canvas_settings,
         })
     }
@@ -132,7 +129,6 @@ impl Canvas {
         self.texture_renderer.render(
             render_pass,
             &self.wgpu_context,
-            &self.texture_repository,
             &self.camera,
             &mut self.graphics.draw_texture_operations,
         );
@@ -199,15 +195,15 @@ impl Graphics {
     }
 
     pub fn draw_sprite_in_rect<R: Into<Rect>>(&mut self, sprite: &Sprite, rect: R) {
-        let index = self.next_index(OperationType::DrawTexture(sprite.texture_id));
+        let index = self.next_index(OperationType::DrawTexture(sprite.texture.id));
         let tex_coords = sprite.tex_coords;
         let destination = rect.into();
-        let texture_id = sprite.texture_id;
+        let texture = sprite.texture.clone();
         self.draw_texture_operations.push(DrawTextureOperation {
             index,
             tex_coords,
             destination,
-            texture_id,
+            texture,
         });
     }
 
@@ -240,7 +236,7 @@ pub(crate) struct DrawTextureOperation {
     pub index: u16,
     pub tex_coords: Rect,
     pub destination: Rect,
-    pub texture_id: TextureId,
+    pub texture: Rc<Texture>,
 }
 
 #[derive(Clone, Copy)]
@@ -378,7 +374,7 @@ impl WgpuContext {
 }
 
 struct DepthTexture {
-    texture: Texture,
+    texture: wgpu::Texture,
     view: Rc<TextureView>,
     sampler: Sampler,
 }

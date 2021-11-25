@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, path::Path, rc::Rc};
+use std::{path::Path, rc::Rc, sync::atomic::AtomicU32};
 
 use itertools::Itertools;
 use wgpu::{
@@ -11,18 +11,9 @@ use crate::{
 };
 
 pub struct Sprite {
-    pub(crate) texture_id: TextureId,
     pub(crate) size: Size,
     pub(crate) tex_coords: Rect,
-    texture_repository: Rc<RefCell<TextureRepository>>,
-}
-
-impl Drop for Sprite {
-    fn drop(&mut self) {
-        self.texture_repository
-            .borrow_mut()
-            .release_texture(&self.texture_id);
-    }
+    pub(crate) texture: Rc<Texture>,
 }
 
 impl Sprite {
@@ -30,7 +21,7 @@ impl Sprite {
     where
         S: Into<Size> + Copy,
     {
-        let texture = Texture::new(canvas, rgba, dimensions);
+        let texture = Rc::new(Texture::new(canvas, rgba, dimensions));
         let tex_coord = Rect {
             left: 0.0,
             top: 0.0,
@@ -38,16 +29,10 @@ impl Sprite {
             bottom: 1.0,
         };
 
-        let texture_id = {
-            let mut repository = canvas.texture_repository.borrow_mut();
-            repository.store_texture(texture)
-        };
-
         Sprite {
-            texture_id,
             size: dimensions.into(),
             tex_coords: tex_coord,
-            texture_repository: canvas.texture_repository.clone(),
+            texture,
         }
     }
 
@@ -64,10 +49,9 @@ impl Sprite {
 }
 
 pub struct TileSet {
-    pub(crate) texture_id: TextureId,
     pub(crate) dimensions: Size,
     pub(crate) tile_dimensions: Size,
-    texture_repository: Rc<RefCell<TextureRepository>>,
+    texture: Rc<Texture>,
 }
 
 impl TileSet {
@@ -81,18 +65,12 @@ impl TileSet {
         S: Into<Size> + Copy,
         TS: Into<Size> + Copy,
     {
-        let texture = Texture::new(canvas, rgba, dimensions);
-
-        let texture_id = {
-            let mut repository = canvas.texture_repository.borrow_mut();
-            repository.store_texture(texture)
-        };
+        let texture = Rc::new(Texture::new(canvas, rgba, dimensions));
 
         TileSet {
-            texture_id,
             dimensions: dimensions.into(),
             tile_dimensions: tile_dimensions.into(),
-            texture_repository: canvas.texture_repository.clone(),
+            texture,
         }
     }
 
@@ -119,18 +97,11 @@ impl TileSet {
     pub fn sprite(x: u32, y: u32) {}
 }
 
-impl Drop for TileSet {
-    fn drop(&mut self) {
-        self.texture_repository
-            .borrow_mut()
-            .release_texture(&self.texture_id);
-    }
-}
-
 #[derive(PartialEq, Eq, PartialOrd, Hash, Clone, Copy)]
 pub(crate) struct TextureId(u32);
 
 pub(crate) struct Texture {
+    pub id: TextureId,
     pub size: Size,
     pub texture_bind_group: BindGroup,
     pub render_pipeline: RenderPipeline,
@@ -138,6 +109,8 @@ pub(crate) struct Texture {
 
 impl Texture {
     fn new<S: Into<Size>>(canvas: &Canvas, rgba: &[u8], dimensions: S) -> Self {
+        static INDEX: AtomicU32 = AtomicU32::new(0);
+        let id = INDEX.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let dimensions: Size = dimensions.into();
         let texture_size = wgpu::Extent3d {
             width: dimensions.width,
@@ -249,6 +222,7 @@ impl Texture {
                 });
 
         let texture = Texture {
+            id: TextureId(id),
             size: dimensions,
             texture_bind_group,
             render_pipeline,
@@ -282,48 +256,6 @@ impl TextureVertex {
                     format: wgpu::VertexFormat::Float32x2, // NEW!
                 },
             ],
-        }
-    }
-}
-
-pub(crate) struct TextureRepository {
-    next_id: u32,
-    textures: HashMap<TextureId, Rc<Texture>>,
-    use_count: HashMap<TextureId, u32>,
-}
-
-impl TextureRepository {
-    pub fn new() -> Self {
-        TextureRepository {
-            next_id: 0,
-            textures: HashMap::new(),
-            use_count: HashMap::new(),
-        }
-    }
-
-    fn store_texture(&mut self, texture: Texture) -> TextureId {
-        let texture_id = TextureId(self.next_id);
-        self.next_id += 1;
-
-        let texture = Rc::new(texture);
-        self.textures.insert(texture_id, texture);
-        self.use_count.insert(texture_id, 1);
-
-        texture_id
-    }
-
-    fn get_texture(&self, texture_id: &TextureId) -> Option<Rc<Texture>> {
-        self.textures.get(texture_id).map(|texture| texture.clone())
-    }
-
-    fn release_texture(&mut self, texture_id: &TextureId) {
-        if let Some(count) = self.use_count.get_mut(texture_id) {
-            let new_count = *count - 1;
-            *count = new_count;
-            if new_count == 0 {
-                self.use_count.remove(texture_id);
-                self.textures.remove(texture_id);
-            }
         }
     }
 }
@@ -412,14 +344,18 @@ impl TextureRenderer {
         &'a mut self,
         render_pass: &mut RenderPass<'a>,
         context: &'a WgpuContext,
-        texture_repository: &Rc<RefCell<TextureRepository>>,
         camera: &'a Camera,
         operations: &Vec<DrawTextureOperation>,
     ) {
         self.vertex_buffer.clear();
-        let sorted_op = operations.iter().into_group_map_by(|op| op.texture_id);
+        let sorted_op = operations.iter().into_group_map_by(|op| op.texture.id);
         for key in sorted_op.keys() {
             if let Some(operations) = sorted_op.get(key) {
+                let texture = match operations.first() {
+                    Some(operation) => operation.texture.clone(),
+                    None => continue,
+                };
+
                 let vertices: Vec<_> = operations
                     .iter()
                     .flat_map(|operation| {
@@ -474,27 +410,24 @@ impl TextureRenderer {
                     })
                     .collect();
 
-                let texture = texture_repository.borrow().get_texture(key);
-                if let Some(texture) = texture {
-                    let vertex_buffer =
-                        context
-                            .device
-                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                label: Some("Vertex Buffer"),
-                                contents: bytemuck::cast_slice(&vertices[..]),
-                                usage: wgpu::BufferUsages::VERTEX,
-                            });
-                    let index_buffer =
-                        context
-                            .device
-                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                label: Some("Index Buffer"),
-                                contents: bytemuck::cast_slice(&indices[..]),
-                                usage: wgpu::BufferUsages::INDEX,
-                            });
-                    self.vertex_buffer
-                        .push((vertex_buffer, texture, indices, index_buffer));
-                }
+                let vertex_buffer =
+                    context
+                        .device
+                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some("Vertex Buffer"),
+                            contents: bytemuck::cast_slice(&vertices[..]),
+                            usage: wgpu::BufferUsages::VERTEX,
+                        });
+                let index_buffer =
+                    context
+                        .device
+                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some("Index Buffer"),
+                            contents: bytemuck::cast_slice(&indices[..]),
+                            usage: wgpu::BufferUsages::INDEX,
+                        });
+                self.vertex_buffer
+                    .push((vertex_buffer, texture, indices, index_buffer));
             }
         }
 
