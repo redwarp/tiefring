@@ -11,7 +11,7 @@ use wgpu::{CommandEncoder, RenderPass, Sampler, SurfaceError, Texture, TextureVi
 
 mod camera;
 mod renderer;
-mod sprite;
+pub mod sprite;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -122,10 +122,6 @@ impl Canvas {
         );
     }
 
-    pub fn load_sprite<P: AsRef<Path>>(&mut self, path: P) -> Option<Sprite> {
-        Sprite::load_image(self, path)
-    }
-
     fn handle_draw_operations<'a>(&'a mut self, render_pass: &mut RenderPass<'a>) {
         self.color_renderer.render(
             render_pass,
@@ -196,8 +192,8 @@ impl Graphics {
         let destination = Rect {
             left: position.left,
             top: position.top,
-            right: position.left + sprite.rect.width(),
-            bottom: position.top + sprite.rect.height(),
+            right: position.left + sprite.size.width as f32,
+            bottom: position.top + sprite.size.height as f32,
         };
         self.draw_sprite_in_rect(sprite, destination);
     }
@@ -295,9 +291,18 @@ impl std::ops::Mul<f32> for &Rect {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct Size {
+pub struct Size {
     pub width: u32,
     pub height: u32,
+}
+
+impl From<(u32, u32)> for Size {
+    fn from(size: (u32, u32)) -> Self {
+        Self {
+            width: size.0,
+            height: size.1,
+        }
+    }
 }
 
 struct WgpuContext {

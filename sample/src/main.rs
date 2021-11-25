@@ -1,4 +1,7 @@
-use tefrung::{Canvas, CanvasSettings, Color, Position};
+use tefrung::{
+    sprite::{Sprite, TileSet},
+    Canvas, CanvasSettings, Color, Position,
+};
 use winit::{
     dpi::LogicalSize,
     event::{Event, VirtualKeyCode},
@@ -44,18 +47,13 @@ fn main() {
     .unwrap();
 
     let sprites = find_folder::Search::ParentsThenKids(3, 3)
-        .for_folder("sample")
+        .for_folder("sample/sprites")
         .unwrap();
 
-    let alien_1 = canvas
-        .load_sprite(sprites.join("sprites/p1_jump.png"))
-        .unwrap();
-    let alien_2 = canvas
-        .load_sprite(sprites.join("sprites/p2_front.png"))
-        .unwrap();
-    let alien_3 = canvas
-        .load_sprite(sprites.join("sprites/p3_stand.png"))
-        .unwrap();
+    let alien_1 = Sprite::load_image(&mut canvas, sprites.join("p1_jump.png")).unwrap();
+    let alien_2 = Sprite::load_image(&mut canvas, sprites.join("p2_front.png")).unwrap();
+    let alien_3 = Sprite::load_image(&mut canvas, sprites.join("p3_stand.png")).unwrap();
+    let tile_set = TileSet::load_image(&mut canvas, sprites.join("basictiles.png"), (16, 16));
 
     window.set_visible(true);
 

@@ -12,7 +12,7 @@ use crate::{
 
 pub struct Sprite {
     pub(crate) texture_id: TextureId,
-    pub(crate) rect: Rect,
+    pub(crate) size: Size,
     pub(crate) tex_coords: Rect,
     texture_repository: Rc<RefCell<TextureRepository>>,
 }
@@ -26,19 +26,11 @@ impl Drop for Sprite {
 }
 
 impl Sprite {
-    pub fn load_data(canvas: &mut Canvas, rgba: &[u8], dimensions: (u32, u32)) -> Self {
-        let size = Size {
-            width: dimensions.0,
-            height: dimensions.1,
-        };
-
+    pub fn load_data<S>(canvas: &mut Canvas, rgba: &[u8], dimensions: S) -> Self
+    where
+        S: Into<Size> + Copy,
+    {
         let texture = Texture::new(canvas, rgba, dimensions);
-        let rect = Rect {
-            left: 0.0,
-            top: 0.0,
-            right: size.width as f32,
-            bottom: size.height as f32,
-        };
         let tex_coord = Rect {
             left: 0.0,
             top: 0.0,
@@ -53,7 +45,7 @@ impl Sprite {
 
         Sprite {
             texture_id,
-            rect,
+            size: dimensions.into(),
             tex_coords: tex_coord,
             texture_repository: canvas.texture_repository.clone(),
         }
@@ -71,6 +63,70 @@ impl Sprite {
     }
 }
 
+pub struct TileSet {
+    pub(crate) texture_id: TextureId,
+    pub(crate) dimensions: Size,
+    pub(crate) tile_dimensions: Size,
+    texture_repository: Rc<RefCell<TextureRepository>>,
+}
+
+impl TileSet {
+    pub fn load_data<S, TS>(
+        canvas: &mut Canvas,
+        rgba: &[u8],
+        dimensions: S,
+        tile_dimensions: TS,
+    ) -> Self
+    where
+        S: Into<Size> + Copy,
+        TS: Into<Size> + Copy,
+    {
+        let texture = Texture::new(canvas, rgba, dimensions);
+
+        let texture_id = {
+            let mut repository = canvas.texture_repository.borrow_mut();
+            repository.store_texture(texture)
+        };
+
+        TileSet {
+            texture_id,
+            dimensions: dimensions.into(),
+            tile_dimensions: tile_dimensions.into(),
+            texture_repository: canvas.texture_repository.clone(),
+        }
+    }
+
+    pub fn load_image<P, S>(canvas: &mut Canvas, path: P, tile_dimensions: S) -> Option<Self>
+    where
+        P: AsRef<Path>,
+        S: Into<Size> + Copy,
+    {
+        let image = image::open(path).ok()?;
+
+        let rgba = image.as_rgba8()?;
+
+        use image::GenericImageView;
+        let dimensions = image.dimensions();
+
+        Some(TileSet::load_data::<(u32, u32), S>(
+            canvas,
+            rgba,
+            dimensions.into(),
+            tile_dimensions,
+        ))
+    }
+
+    pub fn sprite(x: u32, y: u32) {}
+}
+
+impl Drop for TileSet {
+    fn drop(&mut self) {
+        self.texture_repository
+            .borrow_mut()
+            .release_texture(&self.texture_id);
+    }
+}
+
 #[derive(PartialEq, Eq, PartialOrd, Hash, Clone, Copy)]
 pub(crate) struct TextureId(u32);
 
@@ -81,10 +137,11 @@ pub(crate) struct Texture {
 }
 
 impl Texture {
-    fn new(canvas: &Canvas, rgba: &[u8], dimensions: (u32, u32)) -> Self {
+    fn new<S: Into<Size>>(canvas: &Canvas, rgba: &[u8], dimensions: S) -> Self {
+        let dimensions: Size = dimensions.into();
         let texture_size = wgpu::Extent3d {
-            width: dimensions.0,
-            height: dimensions.1,
+            width: dimensions.width,
+            height: dimensions.height,
             depth_or_array_layers: 1,
         };
         let wgpu_texture = canvas
@@ -113,17 +170,13 @@ impl Texture {
             // The layout of the texture
             wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: std::num::NonZeroU32::new(4 * dimensions.0),
-                rows_per_image: std::num::NonZeroU32::new(dimensions.1),
+                bytes_per_row: std::num::NonZeroU32::new(4 * dimensions.width),
+                rows_per_image: std::num::NonZeroU32::new(dimensions.height),
             },
             texture_size,
         );
 
         let texture_view = wgpu_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let size = Size {
-            width: dimensions.0,
-            height: dimensions.1,
-        };
 
         let texture_bind_group: BindGroup =
             canvas
@@ -196,7 +249,7 @@ impl Texture {
                 });
 
         let texture = Texture {
-            size,
+            size: dimensions,
             texture_bind_group,
             render_pipeline,
         };
