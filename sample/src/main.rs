@@ -1,4 +1,4 @@
-use tefrung::{
+use tiefring::{
     sprite::{Sprite, TileSet},
     Canvas, CanvasSettings, Color, Position,
 };
@@ -19,7 +19,7 @@ fn main() {
     let window = {
         let size = LogicalSize::new(WIDTH as f64, HEIGHT as f64);
         WindowBuilder::new()
-            .with_title("Hello Tēfrung")
+            .with_title("Hello Tīefring")
             .with_inner_size(size)
             .with_min_inner_size(size)
             .with_visible(false)
