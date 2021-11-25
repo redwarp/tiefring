@@ -1,4 +1,4 @@
-use std::{cell::RefCell, path::Path, rc::Rc};
+use std::rc::Rc;
 
 use camera::Camera;
 use raw_window_handle::HasRawWindowHandle;
@@ -188,8 +188,8 @@ impl Graphics {
         let destination = Rect {
             left: position.left,
             top: position.top,
-            right: position.left + sprite.size.width as f32,
-            bottom: position.top + sprite.size.height as f32,
+            right: position.left + sprite.dimensions.width as f32,
+            bottom: position.top + sprite.dimensions.height as f32,
         };
         self.draw_sprite_in_rect(sprite, destination);
     }

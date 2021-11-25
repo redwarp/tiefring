@@ -53,7 +53,8 @@ fn main() {
     let alien_1 = Sprite::load_image(&mut canvas, sprites.join("p1_jump.png")).unwrap();
     let alien_2 = Sprite::load_image(&mut canvas, sprites.join("p2_front.png")).unwrap();
     let alien_3 = Sprite::load_image(&mut canvas, sprites.join("p3_stand.png")).unwrap();
-    let tile_set = TileSet::load_image(&mut canvas, sprites.join("basictiles.png"), (16, 16));
+    let tile_set =
+        TileSet::load_image(&mut canvas, sprites.join("basictiles.png"), (16, 16)).unwrap();
 
     window.set_visible(true);
 
@@ -119,6 +120,20 @@ fn main() {
                             top: 200.0,
                         },
                     );
+
+                    let (x, y) = tile_set.tile_count();
+                    for i in 0..x {
+                        for j in 0..y {
+                            let sprite = tile_set.sprite(i, j);
+                            graphics.draw_sprite(
+                                &sprite,
+                                Position {
+                                    left: i as f32 * 16.0 + 300.0,
+                                    top: j as f32 * 16.0,
+                                },
+                            )
+                        }
+                    }
                 })
                 .unwrap();
         }

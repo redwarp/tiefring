@@ -11,7 +11,7 @@ use crate::{
 };
 
 pub struct Sprite {
-    pub(crate) size: Size,
+    pub(crate) dimensions: Size,
     pub(crate) tex_coords: Rect,
     pub(crate) texture: Rc<Texture>,
 }
@@ -30,7 +30,7 @@ impl Sprite {
         };
 
         Sprite {
-            size: dimensions.into(),
+            dimensions: dimensions.into(),
             tex_coords: tex_coord,
             texture,
         }
@@ -94,7 +94,27 @@ impl TileSet {
         ))
     }
 
-    pub fn sprite(x: u32, y: u32) {}
+    pub fn tile_count(&self) -> (u32, u32) {
+        (
+            self.dimensions.width / self.tile_dimensions.width,
+            self.dimensions.height / self.tile_dimensions.height,
+        )
+    }
+
+    pub fn sprite(&self, x: u32, y: u32) -> Sprite {
+        let tex_coords = Rect {
+            left: (x * self.tile_dimensions.width) as f32 / self.dimensions.width as f32,
+            top: (y * self.tile_dimensions.height) as f32 / self.dimensions.height as f32,
+            right: ((x + 1) * self.tile_dimensions.width) as f32 / self.dimensions.width as f32,
+            bottom: ((y + 1) * self.tile_dimensions.height) as f32 / self.dimensions.height as f32,
+        };
+
+        Sprite {
+            dimensions: self.tile_dimensions,
+            tex_coords,
+            texture: self.texture.clone(),
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Hash, Clone, Copy)]
@@ -102,7 +122,6 @@ pub(crate) struct TextureId(u32);
 
 pub(crate) struct Texture {
     pub id: TextureId,
-    pub size: Size,
     pub texture_bind_group: BindGroup,
     pub render_pipeline: RenderPipeline,
 }
@@ -111,6 +130,7 @@ impl Texture {
     fn new<S: Into<Size>>(canvas: &Canvas, rgba: &[u8], dimensions: S) -> Self {
         static INDEX: AtomicU32 = AtomicU32::new(0);
         let id = INDEX.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        println!("Creating texture with id {}", id);
         let dimensions: Size = dimensions.into();
         let texture_size = wgpu::Extent3d {
             width: dimensions.width,
@@ -223,7 +243,6 @@ impl Texture {
 
         let texture = Texture {
             id: TextureId(id),
-            size: dimensions,
             texture_bind_group,
             render_pipeline,
         };
