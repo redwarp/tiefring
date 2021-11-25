@@ -117,7 +117,7 @@ impl TileSet {
     }
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Hash, Clone, Copy)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 pub(crate) struct TextureId(u32);
 
 pub(crate) struct Texture {
@@ -130,7 +130,6 @@ impl Texture {
     fn new<S: Into<Size>>(canvas: &Canvas, rgba: &[u8], dimensions: S) -> Self {
         static INDEX: AtomicU32 = AtomicU32::new(0);
         let id = INDEX.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        println!("Creating texture with id {}", id);
         let dimensions: Size = dimensions.into();
         let texture_size = wgpu::Extent3d {
             width: dimensions.width,
@@ -367,8 +366,8 @@ impl TextureRenderer {
         operations: &Vec<DrawTextureOperation>,
     ) {
         self.vertex_buffer.clear();
-        let sorted_op = operations.iter().into_group_map_by(|op| op.texture.id);
-        for key in sorted_op.keys() {
+        let sorted_op = operations.iter().into_group_map_by(|op| op.index);
+        for key in sorted_op.keys().into_iter().sorted() {
             if let Some(operations) = sorted_op.get(key) {
                 let texture = match operations.first() {
                     Some(operation) => operation.texture.clone(),

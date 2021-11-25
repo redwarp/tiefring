@@ -134,6 +134,14 @@ fn main() {
                             )
                         }
                     }
+
+                    graphics.draw_sprite(
+                        &alien_1,
+                        Position {
+                            left: 350.0,
+                            top: 0.0,
+                        },
+                    );
                 })
                 .unwrap();
         }
