@@ -1,3 +1,3 @@
 [workspace]
-members = ["tiefring", "sample"]
+members = ["tiefring", "sample", "snake"]
 resolver = "2"

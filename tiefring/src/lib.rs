@@ -248,6 +248,33 @@ pub struct Rect {
 }
 
 impl Rect {
+    pub fn new(left: f32, top: f32, right: f32, bottom: f32) -> Self {
+        Self {
+            left,
+            top,
+            right,
+            bottom,
+        }
+    }
+
+    pub fn from_xywh(x: f32, y: f32, width: f32, height: f32) -> Self {
+        Self {
+            left: x,
+            top: y,
+            right: x + width,
+            bottom: y + height,
+        }
+    }
+
+    pub fn square(x: f32, y: f32, width: f32) -> Self {
+        Self {
+            left: x,
+            top: y,
+            right: x + width,
+            bottom: y + width,
+        }
+    }
+
     pub fn width(&self) -> f32 {
         self.right - self.left
     }
@@ -269,6 +296,17 @@ impl From<[i32; 4]> for Rect {
             top: coordinates[1] as f32,
             right: coordinates[2] as f32,
             bottom: coordinates[3] as f32,
+        }
+    }
+}
+
+impl From<(Position, Size)> for Rect {
+    fn from((position, size): (Position, Size)) -> Self {
+        Rect {
+            left: position.left,
+            top: position.top,
+            right: position.left + size.width as f32,
+            bottom: position.top + size.height as f32,
         }
     }
 }
@@ -340,9 +378,7 @@ impl WgpuContext {
 
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface
-                .get_preferred_format(&adapter)
-                .ok_or(Error::InitializationFailed)?,
+            format: wgpu::TextureFormat::Bgra8Unorm,
             width,
             height,
             present_mode: wgpu::PresentMode::Fifo,
