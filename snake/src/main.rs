@@ -1,4 +1,7 @@
-use std::collections::VecDeque;
+use std::{
+    collections::VecDeque,
+    time::{Duration, Instant},
+};
 
 use rand::Rng;
 use tiefring::{Canvas, CanvasSettings, Color, Graphics, Rect};
@@ -14,6 +17,7 @@ const WIDTH: u8 = 30;
 const HEIGHT: u8 = 20;
 const GRID_STEP: f32 = 25.0;
 
+#[derive(Clone, Copy)]
 pub enum Direction {
     Up,
     Right,
@@ -21,6 +25,7 @@ pub enum Direction {
     Left,
 }
 
+#[derive(PartialEq)]
 struct Position {
     x: i32,
     y: i32,
@@ -106,6 +111,31 @@ impl Snake {
         self.body.front().expect("The snake has not body")
     }
 
+    fn update(&mut self, food: &Food, new_direction: Option<Direction>) {
+        if let Some(direction) = new_direction {
+            let valid_direction = match (self.direction, direction) {
+                (Direction::Up, Direction::Down) => false,
+                (Direction::Down, Direction::Up) => false,
+                (Direction::Left, Direction::Right) => false,
+                (Direction::Right, Direction::Left) => false,
+                _ => true,
+            };
+            if valid_direction {
+                self.direction = direction;
+            }
+        }
+
+        let new_head = self.head().moved(self.direction);
+        self.body.push_front(new_head);
+        if !self.is_eating(food) {
+            self.body.pop_back();
+        }
+    }
+
+    fn is_eating(&self, food: &Food) -> bool {
+        self.head() == &food.position
+    }
+
     fn render(&self, graphics: &mut Graphics) {
         static RED: Color = Color {
             r: 0.9,
@@ -150,17 +180,26 @@ struct Game {
     size: (u8, u8),
     snake: Snake,
     food: Food,
+    dt: Duration,
+    score: u32,
+    pending_direction: Option<Direction>,
 }
 
 impl Game {
     fn new((width, height): (u8, u8)) -> Self {
         let snake = Snake::new(width as i32 / 2, height as i32 / 2);
         let food = Food::generate_food(width, height, &snake);
+        let dt = Duration::new(0, 0);
+        let score = 0;
+        let pending_direction = None;
 
         Game {
             size: (width, height),
             snake,
             food,
+            dt,
+            score,
+            pending_direction,
         }
     }
 
@@ -171,6 +210,44 @@ impl Game {
 
     fn generate_food(&mut self) {
         self.food = Food::generate_food(self.size.0, self.size.1, &self.snake);
+    }
+
+    fn try_update(&mut self, dt: Duration, direction: Option<Direction>) -> bool {
+        let step = Duration::new(0, 250_000_000);
+        if direction.is_some() {
+            self.pending_direction = direction;
+        }
+
+        self.dt += dt;
+
+        let should_update = if self.dt >= step {
+            loop {
+                self.dt -= step;
+                if self.dt < step {
+                    break;
+                }
+            }
+            true
+        } else {
+            false
+        };
+
+        if should_update {
+            self.update(self.pending_direction);
+        }
+
+        should_update
+    }
+
+    fn update(&mut self, direction: Option<Direction>) {
+        self.snake.update(&self.food, direction);
+
+        if self.snake.is_eating(&self.food) {
+            self.generate_food();
+            self.score += 1;
+        }
+
+        self.pending_direction = None;
     }
 }
 
@@ -208,8 +285,9 @@ fn main() {
     }
     .unwrap();
 
-    let game = Game::new((WIDTH, HEIGHT));
+    let mut game = Game::new((WIDTH, HEIGHT));
 
+    let mut time = Instant::now();
     window.set_visible(true);
 
     event_loop.run(move |event, _, control_flow| {
@@ -228,10 +306,27 @@ fn main() {
                 *control_flow = ControlFlow::Exit;
                 return;
             }
+            let direction = if input.key_held(VirtualKeyCode::Up) {
+                Some(Direction::Up)
+            } else if input.key_held(VirtualKeyCode::Left) {
+                Some(Direction::Left)
+            } else if input.key_held(VirtualKeyCode::Down) {
+                Some(Direction::Down)
+            } else if input.key_held(VirtualKeyCode::Right) {
+                Some(Direction::Right)
+            } else {
+                None
+            };
 
             if let Some(size) = input.window_resized() {
                 canvas.resize(size.width, size.height);
             }
+
+            let now = Instant::now();
+            let dt = now.duration_since(time);
+            time = now;
+
+            game.try_update(dt, direction);
 
             window.request_redraw();
         }
