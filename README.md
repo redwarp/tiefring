@@ -1,5 +1,7 @@
 # Tīefring
 
+## A 2d engine
+
 Sure, let's write some kind of 2d engine.
 
 What I'm aiming for:
@@ -23,3 +25,8 @@ Sample sprites from:
 - https://opengameart.org/content/tiny-16-basic
 
 ![Screenshot](screenshot.png)
+
+## Examples
+
+- [Sample](sample) - Random call to the api to validate it works.
+- [Snake](snake) - A snake implementation.
