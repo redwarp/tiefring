@@ -4,7 +4,7 @@ use std::{
 };
 
 use rand::Rng;
-use tiefring::{Canvas, CanvasSettings, Color, Graphics, Rect};
+use tiefring::{sprite::Sprite, Canvas, CanvasSettings, Color, Graphics, Rect};
 use winit::{
     dpi::LogicalSize,
     event::{Event, VirtualKeyCode},
@@ -12,10 +12,19 @@ use winit::{
     window::WindowBuilder,
 };
 use winit_input_helper::WinitInputHelper;
+use Option;
 
 const WIDTH: u8 = 30;
 const HEIGHT: u8 = 20;
 const GRID_STEP: f32 = 25.0;
+
+pub enum Input {
+    Up,
+    Right,
+    Down,
+    Left,
+    Space,
+}
 
 #[derive(Clone, Copy)]
 pub enum Direction {
@@ -111,6 +120,22 @@ impl Snake {
         self.body.front().expect("The snake has not body")
     }
 
+    fn is_eating_itself(&self) -> bool {
+        let head = self.head().clone();
+        self.body.iter().skip(1).any(|ring| head == ring)
+    }
+
+    fn is_out_of_bounds(&self, bounds: (u8, u8)) -> bool {
+        let width = bounds.0 as i32;
+        let height = bounds.1 as i32;
+        let &Position { x, y } = self.head().clone();
+        if x < 0 || x >= width || y < 0 || y >= height {
+            true
+        } else {
+            false
+        }
+    }
+
     fn update(&mut self, food: &Food, new_direction: Option<Direction>) {
         if let Some(direction) = new_direction {
             let valid_direction = match (self.direction, direction) {
@@ -176,22 +201,40 @@ impl Snake {
     }
 }
 
+enum State {
+    Playing,
+    Losing,
+    Starting,
+}
+
+struct Sprites {
+    start_sprite: Sprite,
+}
+
 struct Game {
     size: (u8, u8),
     snake: Snake,
     food: Food,
     dt: Duration,
     score: u32,
-    pending_direction: Option<Direction>,
+    pending_input: Option<Input>,
+    state: State,
+    sprites: Sprites,
 }
 
 impl Game {
-    fn new((width, height): (u8, u8)) -> Self {
+    fn new((width, height): (u8, u8), canvas: &mut Canvas) -> Self {
         let snake = Snake::new(width as i32 / 2, height as i32 / 2);
         let food = Food::generate_food(width, height, &snake);
         let dt = Duration::new(0, 0);
         let score = 0;
-        let pending_direction = None;
+
+        let sprites = find_folder::Search::ParentsThenKids(3, 3)
+            .for_folder("snake/sprites")
+            .unwrap();
+        let sprites = Sprites {
+            start_sprite: Sprite::load_image(canvas, sprites.join("start.png")).unwrap(),
+        };
 
         Game {
             size: (width, height),
@@ -199,23 +242,45 @@ impl Game {
             food,
             dt,
             score,
-            pending_direction,
+            pending_input: None,
+            state: State::Starting,
+            sprites,
         }
     }
 
     fn render(&self, graphics: &mut Graphics) {
-        self.snake.render(graphics);
-        self.food.render(graphics);
+        match self.state {
+            State::Starting => {
+                let position = tiefring::Position {
+                    left: (self.size.0 as f32 * GRID_STEP
+                        - self.sprites.start_sprite.dimensions.width as f32)
+                        / 2.0,
+                    top: (self.size.1 as f32 * GRID_STEP
+                        - self.sprites.start_sprite.dimensions.height as f32)
+                        / 2.0,
+                };
+                graphics.draw_sprite(&self.sprites.start_sprite, position);
+            }
+            State::Playing => {
+                self.snake.render(graphics);
+                self.food.render(graphics);
+            }
+            _ => {}
+        }
     }
 
     fn generate_food(&mut self) {
         self.food = Food::generate_food(self.size.0, self.size.1, &self.snake);
     }
 
-    fn try_update(&mut self, dt: Duration, direction: Option<Direction>) -> bool {
+    fn is_loosing(&self) -> bool {
+        self.snake.is_eating_itself() || self.snake.is_out_of_bounds(self.size)
+    }
+
+    fn try_update(&mut self, dt: Duration, input: Option<Input>) -> bool {
         let step = Duration::new(0, 250_000_000);
-        if direction.is_some() {
-            self.pending_direction = direction;
+        if input.is_some() {
+            self.pending_input = input;
         }
 
         self.dt += dt;
@@ -233,21 +298,40 @@ impl Game {
         };
 
         if should_update {
-            self.update(self.pending_direction);
+            self.update();
         }
 
         should_update
     }
 
-    fn update(&mut self, direction: Option<Direction>) {
-        self.snake.update(&self.food, direction);
+    fn update(&mut self) {
+        match self.state {
+            State::Starting => {
+                if let Some(Input::Space) = self.pending_input {
+                    self.state = State::Playing;
+                }
+            }
+            State::Playing => {
+                let direction = match self.pending_input {
+                    Some(Input::Up) => Some(Direction::Up),
+                    Some(Input::Down) => Some(Direction::Down),
+                    Some(Input::Left) => Some(Direction::Left),
+                    Some(Input::Right) => Some(Direction::Right),
+                    _ => None,
+                };
 
-        if self.snake.is_eating(&self.food) {
-            self.generate_food();
-            self.score += 1;
+                self.snake.update(&self.food, direction);
+
+                if self.snake.is_eating(&self.food) {
+                    self.generate_food();
+                    self.score += 1;
+                }
+                self.is_loosing();
+            }
+            State::Losing => {}
         }
 
-        self.pending_direction = None;
+        self.pending_input = None;
     }
 }
 
@@ -285,7 +369,7 @@ fn main() {
     }
     .unwrap();
 
-    let mut game = Game::new((WIDTH, HEIGHT));
+    let mut game = Game::new((WIDTH, HEIGHT), &mut canvas);
 
     let mut time = Instant::now();
     window.set_visible(true);
@@ -306,14 +390,16 @@ fn main() {
                 *control_flow = ControlFlow::Exit;
                 return;
             }
-            let direction = if input.key_held(VirtualKeyCode::Up) {
-                Some(Direction::Up)
+            let keyboard_input = if input.key_held(VirtualKeyCode::Up) {
+                Some(Input::Up)
             } else if input.key_held(VirtualKeyCode::Left) {
-                Some(Direction::Left)
+                Some(Input::Left)
             } else if input.key_held(VirtualKeyCode::Down) {
-                Some(Direction::Down)
+                Some(Input::Down)
             } else if input.key_held(VirtualKeyCode::Right) {
-                Some(Direction::Right)
+                Some(Input::Right)
+            } else if input.key_pressed(VirtualKeyCode::Space) {
+                Some(Input::Space)
             } else {
                 None
             };
@@ -326,7 +412,7 @@ fn main() {
             let dt = now.duration_since(time);
             time = now;
 
-            game.try_update(dt, direction);
+            game.try_update(dt, keyboard_input);
 
             window.request_redraw();
         }

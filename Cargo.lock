@@ -1434,6 +1434,7 @@ dependencies = [
 name = "snake"
 version = "0.1.0"
 dependencies = [
+ "find_folder",
  "pollster",
  "rand",
  "tiefring",

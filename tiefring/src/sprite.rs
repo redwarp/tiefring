@@ -11,7 +11,7 @@ use crate::{
 };
 
 pub struct Sprite {
-    pub(crate) dimensions: Size,
+    pub dimensions: Size,
     pub(crate) tex_coords: Rect,
     pub(crate) texture: Rc<Texture>,
 }
@@ -39,12 +39,12 @@ impl Sprite {
     pub fn load_image<P: AsRef<Path>>(canvas: &mut Canvas, path: P) -> Option<Self> {
         let image = image::open(path).ok()?;
 
-        let rgba = image.as_rgba8()?;
+        let rgba = image.to_rgba8();
 
         use image::GenericImageView;
         let dimensions = image.dimensions();
 
-        Some(Sprite::load_data(canvas, rgba, dimensions))
+        Some(Sprite::load_data(canvas, &rgba, dimensions))
     }
 }
 

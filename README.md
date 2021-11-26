@@ -19,14 +19,14 @@ This project is pretty much for learning, and because I think there is room for 
 
 Ortho camera: https://www.reddit.com/r/opengl/comments/fmmtcs/pixel_perfect_window_size/
 
-Sample sprites from:
-
-- https://opengameart.org/content/platformer-art-deluxe
-- https://opengameart.org/content/tiny-16-basic
-
 ![Screenshot](screenshot.png)
 
 ## Examples
 
 - [Sample](sample) - Random call to the api to validate it works.
 - [Snake](snake) - A snake implementation.
+
+## Resources
+
+- https://opengameart.org/content/platformer-art-deluxe
+- https://opengameart.org/content/tiny-16-basic
