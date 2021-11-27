@@ -34,7 +34,7 @@ pub enum Direction {
     Left,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 struct Position {
     x: i32,
     y: i32,
@@ -68,7 +68,12 @@ impl Food {
         let body_indices: Vec<i32> = snake
             .body
             .iter()
-            .map(|&Position { x, y }| y * width as i32 + x)
+            .map(
+                |&Segment {
+                     position: Position { x, y },
+                     ..
+                 }| y * width as i32 + x,
+            )
             .collect();
         while body_indices.iter().any(|&i| i == index) {
             index = (index + 1) % (width as i32 * height as i32);
@@ -101,34 +106,63 @@ impl Food {
 }
 
 struct Snake {
-    body: VecDeque<Position>,
+    body: VecDeque<Segment>,
     direction: Direction,
+}
+
+#[derive(PartialEq)]
+struct Segment {
+    position: Position,
+    was_food: bool,
+}
+
+impl Segment {
+    fn new(x: i32, y: i32) -> Self {
+        Self {
+            position: Position::new(x, y),
+            was_food: false,
+        }
+    }
+
+    fn moved(&self, direction: Direction) -> Self {
+        Self {
+            position: self.position.moved(direction),
+            was_food: false,
+        }
+    }
 }
 
 impl Snake {
     fn new(x: i32, y: i32) -> Self {
         let mut body = VecDeque::new();
-        body.push_back(Position::new(x, y));
-        body.push_back(Position::new(x, y).moved(Direction::Left));
+        body.push_back(Segment::new(x, y));
+        body.push_back(Segment::new(x - 1, y));
 
         let direction = Direction::Right;
 
         Snake { body, direction }
     }
 
-    fn head(&self) -> &Position {
+    fn head(&self) -> &Segment {
         self.body.front().expect("The snake has not body")
+    }
+
+    fn head_mut(&mut self) -> &mut Segment {
+        self.body.front_mut().expect("The snake has not body")
     }
 
     fn is_eating_itself(&self) -> bool {
         let head = self.head().clone();
-        self.body.iter().skip(1).any(|ring| head == ring)
+        self.body
+            .iter()
+            .skip(1)
+            .any(|ring| head.position == ring.position)
     }
 
     fn is_out_of_bounds(&self, bounds: (u8, u8)) -> bool {
         let width = bounds.0 as i32;
         let height = bounds.1 as i32;
-        let &Position { x, y } = self.head().clone();
+        let &Position { x, y } = &self.head().position;
         if x < 0 || x >= width || y < 0 || y >= height {
             true
         } else {
@@ -154,11 +188,13 @@ impl Snake {
         self.body.push_front(new_head);
         if !self.is_eating(food) {
             self.body.pop_back();
+        } else {
+            self.head_mut().was_food = true;
         }
     }
 
     fn is_eating(&self, food: &Food) -> bool {
-        self.head() == &food.position
+        &self.head().position == &food.position
     }
 
     fn render(&self, graphics: &mut Graphics) {
@@ -175,14 +211,23 @@ impl Snake {
             a: 1.0,
         };
 
+        let count = self.body.len();
+        let step = 0.1 / count as f32;
         let mut squares: VecDeque<Rect> = self
             .body
             .iter()
-            .map(|&Position { x, y }| {
+            .enumerate()
+            .map(|(index, segment)| {
+                let Position { x, y } = segment.position;
+                let step = if segment.was_food {
+                    0.0
+                } else {
+                    step * index as f32
+                };
                 Rect::square(
-                    ((x as f32 + 0.05) * GRID_STEP).ceil(),
-                    ((y as f32 + 0.05) * GRID_STEP).ceil(),
-                    (GRID_STEP * 0.9).floor(),
+                    (x as f32 + 0.05 + step) * GRID_STEP,
+                    (y as f32 + 0.05 + step) * GRID_STEP,
+                    GRID_STEP * (0.9 - 2.0 * step),
                 )
             })
             .collect();
