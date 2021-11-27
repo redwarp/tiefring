@@ -71,7 +71,7 @@ impl Food {
             .map(|&Position { x, y }| y * width as i32 + x)
             .collect();
         while body_indices.iter().any(|&i| i == index) {
-            index = (index + 1) % (width * height) as i32;
+            index = (index + 1) % (width as i32 * height as i32);
         }
 
         Food {
@@ -326,7 +326,9 @@ impl Game {
                     self.generate_food();
                     self.score += 1;
                 }
-                self.is_loosing();
+                if self.is_loosing() {
+                    self.state = State::Starting;
+                }
             }
             State::Losing => {}
         }
