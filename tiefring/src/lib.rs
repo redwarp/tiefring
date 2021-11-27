@@ -119,6 +119,59 @@ impl Canvas {
         );
     }
 
+    pub fn screenshot(&self) -> Result<(), Error> {
+        let mut encoder: CommandEncoder =
+            self.wgpu_context
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Screenshot Encoder"),
+                });
+        let output_buffer_size = self.wgpu_context.size.width as u64
+            * self.wgpu_context.size.height as u64
+            * std::mem::size_of::<u32>() as u64;
+        let output_buffer_desc = wgpu::BufferDescriptor {
+            size: output_buffer_size,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            label: None,
+            mapped_at_creation: false,
+        };
+        let output_buffer = self.wgpu_context.device.create_buffer(&output_buffer_desc);
+
+        let texture = &self
+            .wgpu_context
+            .surface
+            .get_current_texture()
+            .map_err(|error: SurfaceError| Error::RenderingFailed(error))?
+            .texture;
+
+        let copy_size = wgpu::Extent3d {
+            width: self.wgpu_context.size.width,
+            height: self.wgpu_context.size.height,
+            depth_or_array_layers: 1,
+        };
+
+        encoder.copy_texture_to_buffer(
+            wgpu::ImageCopyTexture {
+                aspect: wgpu::TextureAspect::All,
+                texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+            },
+            wgpu::ImageCopyBuffer {
+                buffer: &output_buffer,
+                layout: wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: std::num::NonZeroU32::new(4 * self.wgpu_context.size.width),
+                    rows_per_image: std::num::NonZeroU32::new(self.wgpu_context.size.height),
+                },
+            },
+            copy_size,
+        );
+        self.wgpu_context.queue.submit(Some(encoder.finish()));
+
+        Ok(())
+    }
+
     fn handle_draw_operations<'a>(&'a mut self, render_pass: &mut RenderPass<'a>) {
         self.color_renderer.render(
             render_pass,

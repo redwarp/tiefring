@@ -152,6 +152,10 @@ fn main() {
                 return;
             }
 
+            if input.key_pressed(VirtualKeyCode::P) {
+                canvas.screenshot().unwrap();
+            }
+
             if let Some(size) = input.window_resized() {
                 canvas.resize(size.width, size.height);
             }
