@@ -211,24 +211,18 @@ struct Sprites {
     start_sprite: Sprite,
 }
 
-struct Game {
+trait Scene {
+    fn render(&self, graphics: &mut Graphics);
+    fn update(&mut self, dt: Duration, input: Option<Input>) -> Option<State>;
+}
+
+struct StartingScene {
     size: (u8, u8),
-    snake: Snake,
-    food: Food,
-    dt: Duration,
-    score: u32,
-    pending_input: Option<Input>,
-    state: State,
     sprites: Sprites,
 }
 
-impl Game {
+impl StartingScene {
     fn new((width, height): (u8, u8), canvas: &mut Canvas) -> Self {
-        let snake = Snake::new(width as i32 / 2, height as i32 / 2);
-        let food = Food::generate_food(width, height, &snake);
-        let dt = Duration::new(0, 0);
-        let score = 0;
-
         let sprites = find_folder::Search::ParentsThenKids(3, 3)
             .for_folder("snake/sprites")
             .unwrap();
@@ -236,36 +230,75 @@ impl Game {
             start_sprite: Sprite::load_image(canvas, sprites.join("start.png")).unwrap(),
         };
 
-        Game {
+        Self {
+            size: (width, height),
+            sprites,
+        }
+    }
+}
+
+impl Scene for StartingScene {
+    fn render(&self, graphics: &mut Graphics) {
+        let position = tiefring::Position {
+            left: (self.size.0 as f32 * GRID_STEP
+                - self.sprites.start_sprite.dimensions.width as f32)
+                / 2.0,
+            top: (self.size.1 as f32 * GRID_STEP
+                - self.sprites.start_sprite.dimensions.height as f32)
+                / 2.0,
+        };
+        graphics.draw_sprite(&self.sprites.start_sprite, position);
+    }
+
+    fn update(&mut self, _dt: Duration, input: Option<Input>) -> Option<State> {
+        if let Some(Input::Space) = input {
+            Some(State::Playing)
+        } else {
+            None
+        }
+    }
+}
+
+struct PlayingScene {
+    size: (u8, u8),
+    snake: Snake,
+    food: Food,
+    dt: Duration,
+    score: u32,
+    pending_input: Option<Input>,
+}
+
+impl PlayingScene {
+    fn new((width, height): (u8, u8)) -> Self {
+        let snake = Snake::new(width as i32 / 2, height as i32 / 2);
+        let food = Food::generate_food(width, height, &snake);
+        let dt = Duration::new(0, 0);
+        let score = 0;
+
+        Self {
             size: (width, height),
             snake,
             food,
             dt,
             score,
             pending_input: None,
-            state: State::Starting,
-            sprites,
         }
     }
 
-    fn render(&self, graphics: &mut Graphics) {
-        match self.state {
-            State::Starting => {
-                let position = tiefring::Position {
-                    left: (self.size.0 as f32 * GRID_STEP
-                        - self.sprites.start_sprite.dimensions.width as f32)
-                        / 2.0,
-                    top: (self.size.1 as f32 * GRID_STEP
-                        - self.sprites.start_sprite.dimensions.height as f32)
-                        / 2.0,
-                };
-                graphics.draw_sprite(&self.sprites.start_sprite, position);
-            }
-            State::Playing => {
-                self.snake.render(graphics);
-                self.food.render(graphics);
-            }
-            _ => {}
+    fn move_snake(&mut self) {
+        let direction = match self.pending_input {
+            Some(Input::Up) => Some(Direction::Up),
+            Some(Input::Down) => Some(Direction::Down),
+            Some(Input::Left) => Some(Direction::Left),
+            Some(Input::Right) => Some(Direction::Right),
+            _ => None,
+        };
+
+        self.snake.update(&self.food, direction);
+
+        if self.snake.is_eating(&self.food) {
+            self.generate_food();
+            self.score += 1;
         }
     }
 
@@ -276,8 +309,15 @@ impl Game {
     fn is_loosing(&self) -> bool {
         self.snake.is_eating_itself() || self.snake.is_out_of_bounds(self.size)
     }
+}
 
-    fn try_update(&mut self, dt: Duration, input: Option<Input>) -> bool {
+impl Scene for PlayingScene {
+    fn render(&self, graphics: &mut Graphics) {
+        self.snake.render(graphics);
+        self.food.render(graphics);
+    }
+
+    fn update(&mut self, dt: Duration, input: Option<Input>) -> Option<State> {
         let step = Duration::new(0, 250_000_000);
         if input.is_some() {
             self.pending_input = input;
@@ -298,42 +338,49 @@ impl Game {
         };
 
         if should_update {
-            self.update();
+            self.move_snake();
         }
 
-        should_update
+        if self.is_loosing() {
+            Some(State::Starting)
+        } else {
+            None
+        }
+    }
+}
+
+struct Game {
+    size: (u8, u8),
+    scene: Box<dyn Scene>,
+}
+
+impl Game {
+    fn new((width, height): (u8, u8), canvas: &mut Canvas) -> Self {
+        let scene = Box::new(StartingScene::new((width, height), canvas));
+
+        Game {
+            size: (width, height),
+            scene,
+        }
     }
 
-    fn update(&mut self) {
-        match self.state {
-            State::Starting => {
-                if let Some(Input::Space) = self.pending_input {
-                    self.state = State::Playing;
-                }
+    fn render(&self, graphics: &mut Graphics) {
+        self.scene.render(graphics);
+    }
+
+    fn update(&mut self, dt: Duration, input: Option<Input>, canvas: &mut Canvas) -> bool {
+        let result = self.scene.update(dt, input);
+        match result {
+            Some(State::Starting) => {
+                self.scene = Box::new(StartingScene::new(self.size, canvas));
             }
-            State::Playing => {
-                let direction = match self.pending_input {
-                    Some(Input::Up) => Some(Direction::Up),
-                    Some(Input::Down) => Some(Direction::Down),
-                    Some(Input::Left) => Some(Direction::Left),
-                    Some(Input::Right) => Some(Direction::Right),
-                    _ => None,
-                };
-
-                self.snake.update(&self.food, direction);
-
-                if self.snake.is_eating(&self.food) {
-                    self.generate_food();
-                    self.score += 1;
-                }
-                if self.is_loosing() {
-                    self.state = State::Starting;
-                }
+            Some(State::Playing) => {
+                self.scene = Box::new(PlayingScene::new(self.size));
             }
-            State::Losing => {}
-        }
+            _ => {}
+        };
 
-        self.pending_input = None;
+        true
     }
 }
 
@@ -414,7 +461,7 @@ fn main() {
             let dt = now.duration_since(time);
             time = now;
 
-            game.try_update(dt, keyboard_input);
+            game.update(dt, keyboard_input, &mut canvas);
 
             window.request_redraw();
         }
