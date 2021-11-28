@@ -153,7 +153,7 @@ fn main() {
             }
 
             if input.key_pressed(VirtualKeyCode::P) {
-                pollster::block_on(canvas.screenshot()).unwrap();
+                pollster::block_on(canvas.screenshot("screenshot.png")).unwrap();
             }
 
             if let Some(size) = input.window_resized() {

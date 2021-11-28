@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{path::Path, rc::Rc};
 
 use camera::Camera;
 use raw_window_handle::HasRawWindowHandle;
@@ -144,7 +144,7 @@ impl Canvas {
         );
     }
 
-    pub async fn screenshot(&self) -> Result<(), Error> {
+    pub async fn screenshot<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
         let mut encoder: CommandEncoder =
             self.wgpu_context
                 .device
@@ -209,7 +209,7 @@ impl Canvas {
                 *px = Rgba([cmp[2], cmp[1], cmp[0], cmp[3]]);
             }
 
-            buffer.save("image.png").unwrap();
+            buffer.save(path).unwrap();
         }
         output_buffer.unmap();
 
