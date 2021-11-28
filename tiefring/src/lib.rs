@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use camera::Camera;
 use raw_window_handle::HasRawWindowHandle;
-use renderer::ColorRenderer;
+use shape::ColorRenderer;
 use sprite::{Sprite, Texture, TextureId, TextureRenderer};
 use thiserror::Error;
 
@@ -10,8 +10,9 @@ pub use wgpu::Color;
 use wgpu::{CommandEncoder, RenderPass, SurfaceError, TextureView};
 
 mod camera;
-mod renderer;
+mod shape;
 pub mod sprite;
+pub mod text;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -74,8 +75,12 @@ impl Canvas {
             .surface
             .get_current_texture()
             .map_err(|error: SurfaceError| Error::RenderingFailed(error))?;
-        let view = surface_texture
-            .texture
+        // let view = surface_texture
+        //     .texture
+        //     .create_view(&wgpu::TextureViewDescriptor::default());
+        let view = self
+            .wgpu_context
+            .buffer_texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         {
@@ -103,6 +108,26 @@ impl Canvas {
             self.handle_draw_operations(&mut render_pass);
         }
 
+        encoder.copy_texture_to_texture(
+            wgpu::ImageCopyTexture {
+                texture: &self.wgpu_context.buffer_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::ImageCopyTexture {
+                texture: &surface_texture.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::Extent3d {
+                width: self.wgpu_context.size.width,
+                height: self.wgpu_context.size.height,
+                depth_or_array_layers: 1,
+            },
+        );
+
         self.wgpu_context.queue.submit(Some(encoder.finish()));
         surface_texture.present();
 
@@ -119,13 +144,14 @@ impl Canvas {
         );
     }
 
-    pub fn screenshot(&self) -> Result<(), Error> {
+    pub async fn screenshot(&self) -> Result<(), Error> {
         let mut encoder: CommandEncoder =
             self.wgpu_context
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("Screenshot Encoder"),
                 });
+
         let output_buffer_size = self.wgpu_context.size.width as u64
             * self.wgpu_context.size.height as u64
             * std::mem::size_of::<u32>() as u64;
@@ -137,16 +163,13 @@ impl Canvas {
         };
         let output_buffer = self.wgpu_context.device.create_buffer(&output_buffer_desc);
 
-        let texture = &self
-            .wgpu_context
-            .surface
-            .get_current_texture()
-            .map_err(|error: SurfaceError| Error::RenderingFailed(error))?
-            .texture;
+        let texture = &self.wgpu_context.buffer_texture;
+
+        let Size { width, height } = self.wgpu_context.size;
 
         let copy_size = wgpu::Extent3d {
-            width: self.wgpu_context.size.width,
-            height: self.wgpu_context.size.height,
+            width,
+            height,
             depth_or_array_layers: 1,
         };
 
@@ -161,13 +184,34 @@ impl Canvas {
                 buffer: &output_buffer,
                 layout: wgpu::ImageDataLayout {
                     offset: 0,
-                    bytes_per_row: std::num::NonZeroU32::new(4 * self.wgpu_context.size.width),
-                    rows_per_image: std::num::NonZeroU32::new(self.wgpu_context.size.height),
+                    bytes_per_row: std::num::NonZeroU32::new(4 * width),
+                    rows_per_image: std::num::NonZeroU32::new(height),
                 },
             },
             copy_size,
         );
         self.wgpu_context.queue.submit(Some(encoder.finish()));
+
+        {
+            let buffer_slice = output_buffer.slice(..);
+            let mapping = buffer_slice.map_async(wgpu::MapMode::Read);
+            self.wgpu_context.device.poll(wgpu::Maintain::Wait);
+            mapping.await.unwrap();
+
+            let data = buffer_slice.get_mapped_range();
+
+            use image::{ImageBuffer, Rgba};
+            let mut buffer =
+                ImageBuffer::<Rgba<u8>, _>::from_raw(width, height, data.to_vec()).unwrap();
+
+            for px in buffer.pixels_mut() {
+                let cmp = px.0;
+                *px = Rgba([cmp[2], cmp[1], cmp[0], cmp[3]]);
+            }
+
+            buffer.save("image.png").unwrap();
+        }
+        output_buffer.unmap();
 
         Ok(())
     }
@@ -399,6 +443,7 @@ struct WgpuContext {
     config: wgpu::SurfaceConfiguration,
     size: Size,
     depth_texture: DepthTexture,
+    buffer_texture: wgpu::Texture,
 }
 
 impl WgpuContext {
@@ -430,7 +475,7 @@ impl WgpuContext {
             .map_err(|_| Error::InitializationFailed)?;
 
         let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
             format: wgpu::TextureFormat::Bgra8Unorm,
             width,
             height,
@@ -442,6 +487,20 @@ impl WgpuContext {
 
         let depth_texture = DepthTexture::create_depth_texture(&device, &config, "depth_texture");
 
+        let buffer_texture = device.create_texture(&wgpu::TextureDescriptor {
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Bgra8Unorm,
+            usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT,
+            label: None,
+        });
+
         Ok(WgpuContext {
             surface,
             device,
@@ -449,6 +508,7 @@ impl WgpuContext {
             queue,
             size,
             depth_texture,
+            buffer_texture,
         })
     }
 
@@ -459,6 +519,19 @@ impl WgpuContext {
         self.surface.configure(&self.device, &self.config);
         self.depth_texture =
             DepthTexture::create_depth_texture(&self.device, &self.config, "depth_texture");
+        self.buffer_texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Bgra8Unorm,
+            usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT,
+            label: None,
+        });
     }
 }
 

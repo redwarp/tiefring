@@ -7,7 +7,7 @@ use wgpu::{
 };
 
 use crate::{
-    camera::Camera, renderer, Canvas, DepthTexture, DrawTextureOperation, Rect, Size, WgpuContext,
+    camera::Camera, shape, Canvas, DepthTexture, DrawTextureOperation, Rect, Size, WgpuContext,
 };
 
 pub struct Sprite {
@@ -377,7 +377,7 @@ impl TextureRenderer {
                 let vertices: Vec<_> = operations
                     .iter()
                     .flat_map(|operation| {
-                        let depth = renderer::depth(operation.index);
+                        let depth = shape::depth(operation.index);
                         [
                             TextureVertex {
                                 position: [
