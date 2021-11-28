@@ -1,10 +1,14 @@
 use std::{
     collections::VecDeque,
+    rc::Rc,
     time::{Duration, Instant},
 };
 
 use rand::Rng;
-use tiefring::{sprite::Sprite, Canvas, CanvasSettings, Color, Graphics, Rect};
+use tiefring::{
+    sprite::{Sprite, TileSet},
+    Canvas, CanvasSettings, Color, Graphics, Rect, Size,
+};
 use winit::{
     dpi::LogicalSize,
     event::{Event, VirtualKeyCode},
@@ -253,7 +257,21 @@ enum State {
 }
 
 struct Sprites {
-    start_sprite: Sprite,
+    start: Sprite,
+    grass: TileSet,
+}
+
+impl Sprites {
+    fn new(canvas: &mut Canvas) -> Self {
+        let sprites = find_folder::Search::ParentsThenKids(3, 3)
+            .for_folder("snake/sprites")
+            .unwrap();
+        Self {
+            start: Sprite::load_image(canvas, sprites.join("start.png")).unwrap(),
+            grass: TileSet::load_image(canvas, sprites.join("grass.png"), Size::new(25, 25))
+                .unwrap(),
+        }
+    }
 }
 
 trait Scene {
@@ -263,18 +281,11 @@ trait Scene {
 
 struct StartingScene {
     size: (u8, u8),
-    sprites: Sprites,
+    sprites: Rc<Sprites>,
 }
 
 impl StartingScene {
-    fn new((width, height): (u8, u8), canvas: &mut Canvas) -> Self {
-        let sprites = find_folder::Search::ParentsThenKids(3, 3)
-            .for_folder("snake/sprites")
-            .unwrap();
-        let sprites = Sprites {
-            start_sprite: Sprite::load_image(canvas, sprites.join("start.png")).unwrap(),
-        };
-
+    fn new((width, height): (u8, u8), sprites: Rc<Sprites>) -> Self {
         Self {
             size: (width, height),
             sprites,
@@ -285,14 +296,12 @@ impl StartingScene {
 impl Scene for StartingScene {
     fn render(&self, graphics: &mut Graphics) {
         let position = tiefring::Position {
-            left: (self.size.0 as f32 * GRID_STEP
-                - self.sprites.start_sprite.dimensions.width as f32)
+            left: (self.size.0 as f32 * GRID_STEP - self.sprites.start.dimensions.width as f32)
                 / 2.0,
-            top: (self.size.1 as f32 * GRID_STEP
-                - self.sprites.start_sprite.dimensions.height as f32)
+            top: (self.size.1 as f32 * GRID_STEP - self.sprites.start.dimensions.height as f32)
                 / 2.0,
         };
-        graphics.draw_sprite(&self.sprites.start_sprite, position);
+        graphics.draw_sprite(&self.sprites.start, position);
     }
 
     fn update(&mut self, _dt: Duration, input: Option<Input>) -> Option<State> {
@@ -311,10 +320,11 @@ struct PlayingScene {
     dt: Duration,
     score: u32,
     pending_input: Option<Input>,
+    sprites: Rc<Sprites>,
 }
 
 impl PlayingScene {
-    fn new((width, height): (u8, u8)) -> Self {
+    fn new((width, height): (u8, u8), sprites: Rc<Sprites>) -> Self {
         let snake = Snake::new(width as i32 / 2, height as i32 / 2);
         let food = Food::generate_food(width, height, &snake);
         let dt = Duration::new(0, 0);
@@ -327,6 +337,7 @@ impl PlayingScene {
             dt,
             score,
             pending_input: None,
+            sprites,
         }
     }
 
@@ -358,6 +369,21 @@ impl PlayingScene {
 
 impl Scene for PlayingScene {
     fn render(&self, graphics: &mut Graphics) {
+        println!("Drawing background of {:?}", self.size);
+        for i in 0..self.size.0 {
+            for j in 0..self.size.1 {
+                let sprite_index = (i + j) as u32 % 2;
+                let sprite = self.sprites.grass.sprite(sprite_index, 0);
+                graphics.draw_sprite(
+                    &sprite,
+                    tiefring::Position {
+                        top: j as f32 * GRID_STEP,
+                        left: i as f32 * GRID_STEP,
+                    },
+                )
+            }
+        }
+
         self.snake.render(graphics);
         self.food.render(graphics);
     }
@@ -397,15 +423,19 @@ impl Scene for PlayingScene {
 struct Game {
     size: (u8, u8),
     scene: Box<dyn Scene>,
+    sprites: Rc<Sprites>,
 }
 
 impl Game {
     fn new((width, height): (u8, u8), canvas: &mut Canvas) -> Self {
-        let scene = Box::new(StartingScene::new((width, height), canvas));
+        let sprites = Rc::new(Sprites::new(canvas));
+
+        let scene = Box::new(StartingScene::new((width, height), sprites.clone()));
 
         Game {
             size: (width, height),
             scene,
+            sprites,
         }
     }
 
@@ -417,10 +447,10 @@ impl Game {
         let result = self.scene.update(dt, input);
         match result {
             Some(State::Starting) => {
-                self.scene = Box::new(StartingScene::new(self.size, canvas));
+                self.scene = Box::new(StartingScene::new(self.size, self.sprites.clone()));
             }
             Some(State::Playing) => {
-                self.scene = Box::new(PlayingScene::new(self.size));
+                self.scene = Box::new(PlayingScene::new(self.size, self.sprites.clone()));
             }
             _ => {}
         };

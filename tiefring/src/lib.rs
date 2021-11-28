@@ -427,6 +427,12 @@ pub struct Size {
     pub height: u32,
 }
 
+impl Size {
+    pub fn new(width: u32, height: u32) -> Self {
+        Self { width, height }
+    }
+}
+
 impl From<(u32, u32)> for Size {
     fn from(size: (u32, u32)) -> Self {
         Self {

@@ -81,14 +81,14 @@ impl TileSet {
     {
         let image = image::open(path).ok()?;
 
-        let rgba = image.as_rgba8()?;
+        let rgba = image.to_rgba8();
 
         use image::GenericImageView;
         let dimensions = image.dimensions();
 
         Some(TileSet::load_data::<(u32, u32), S>(
             canvas,
-            rgba,
+            &rgba,
             dimensions.into(),
             tile_dimensions,
         ))
