@@ -370,12 +370,14 @@ impl PlayingScene {
 impl Scene for PlayingScene {
     fn render(&self, graphics: &mut Graphics) {
         println!("Drawing background of {:?}", self.size);
+        let grasses: Vec<_> = (0..3)
+            .map(|index| self.sprites.grass.sprite(index, 0))
+            .collect();
         for i in 0..self.size.0 {
             for j in 0..self.size.1 {
-                let sprite_index = (i + j) as u32 % 2;
-                let sprite = self.sprites.grass.sprite(sprite_index, 0);
+                let sprite_index = (i + j) as usize % 3;
                 graphics.draw_sprite(
-                    &sprite,
+                    unsafe { grasses.get_unchecked(sprite_index) },
                     tiefring::Position {
                         top: j as f32 * GRID_STEP,
                         left: i as f32 * GRID_STEP,
