@@ -370,7 +370,7 @@ impl PlayingScene {
 impl Scene for PlayingScene {
     fn render(&self, graphics: &mut Graphics) {
         println!("Drawing background of {:?}", self.size);
-        let grasses: Vec<_> = (0..3)
+        let grasses: Vec<_> = (0..4)
             .map(|index| self.sprites.grass.sprite(index, 0))
             .collect();
         for i in 0..self.size.0 {
