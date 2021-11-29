@@ -2,8 +2,7 @@ use std::{path::Path, rc::Rc, sync::atomic::AtomicU32};
 
 use itertools::Itertools;
 use wgpu::{
-    util::DeviceExt, BindGroup, BindGroupLayout, Buffer, PipelineLayout, RenderPass,
-    RenderPipeline, Sampler, ShaderModule,
+    util::DeviceExt, BindGroup, BindGroupLayout, Buffer, RenderPass, RenderPipeline, Sampler,
 };
 
 use crate::{
@@ -123,7 +122,6 @@ pub(crate) struct TextureId(u32);
 pub(crate) struct Texture {
     pub id: TextureId,
     pub texture_bind_group: BindGroup,
-    pub render_pipeline: RenderPipeline,
 }
 
 impl Texture {
@@ -191,59 +189,9 @@ impl Texture {
                     label: Some("diffuse_bind_group"),
                 });
 
-        let render_pipeline =
-            canvas
-                .wgpu_context
-                .device
-                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some("Texture Render Pipeline"),
-                    layout: Some(&canvas.texture_renderer.render_pipeline_layout),
-                    vertex: wgpu::VertexState {
-                        module: &canvas.texture_renderer.shader,
-                        entry_point: "vs_main",                   // 1.
-                        buffers: &[TextureVertex::description()], // 2.
-                    },
-                    fragment: Some(wgpu::FragmentState {
-                        // 3.
-                        module: &canvas.texture_renderer.shader,
-                        entry_point: "fs_main",
-                        targets: &[wgpu::ColorTargetState {
-                            // 4.
-                            format: canvas.wgpu_context.config.format,
-                            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                            write_mask: wgpu::ColorWrites::ALL,
-                        }],
-                    }),
-                    primitive: wgpu::PrimitiveState {
-                        topology: wgpu::PrimitiveTopology::TriangleList, // 1.
-                        strip_index_format: None,
-                        front_face: wgpu::FrontFace::Ccw, // 2.
-                        cull_mode: Some(wgpu::Face::Back),
-                        // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
-                        polygon_mode: wgpu::PolygonMode::Fill,
-                        // Requires Features::DEPTH_CLAMPING
-                        clamp_depth: false,
-                        // Requires Features::CONSERVATIVE_RASTERIZATION
-                        conservative: false,
-                    },
-                    depth_stencil: Some(wgpu::DepthStencilState {
-                        format: DepthTexture::DEPTH_FORMAT,
-                        depth_write_enabled: true,
-                        depth_compare: wgpu::CompareFunction::GreaterEqual, // 1.
-                        stencil: wgpu::StencilState::default(),             // 2.
-                        bias: wgpu::DepthBiasState::default(),
-                    }),
-                    multisample: wgpu::MultisampleState {
-                        count: 1,                         // 2.
-                        mask: !0,                         // 3.
-                        alpha_to_coverage_enabled: false, // 4.
-                    },
-                });
-
         let texture = Texture {
             id: TextureId(id),
             texture_bind_group,
-            render_pipeline,
         };
         texture
     }
@@ -279,10 +227,9 @@ impl TextureVertex {
 }
 
 pub(crate) struct TextureRenderer {
-    shader: ShaderModule,
+    render_pipeline: RenderPipeline,
     sampler: Sampler,
     texture_bind_group_layout: BindGroupLayout,
-    render_pipeline_layout: PipelineLayout,
     vertex_buffer: Vec<(Buffer, Rc<Texture>, Vec<u16>, Buffer)>,
 }
 
@@ -339,6 +286,54 @@ impl TextureRenderer {
                     push_constant_ranges: &[],
                 });
 
+        let render_pipeline =
+            context
+                .device
+                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("Texture Render Pipeline"),
+                    layout: Some(&render_pipeline_layout),
+                    vertex: wgpu::VertexState {
+                        module: &shader,
+                        entry_point: "vs_main",                   // 1.
+                        buffers: &[TextureVertex::description()], // 2.
+                    },
+                    fragment: Some(wgpu::FragmentState {
+                        // 3.
+                        module: &shader,
+                        entry_point: "fs_main",
+                        targets: &[wgpu::ColorTargetState {
+                            // 4.
+                            format: context.config.format,
+                            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                            write_mask: wgpu::ColorWrites::ALL,
+                        }],
+                    }),
+                    primitive: wgpu::PrimitiveState {
+                        topology: wgpu::PrimitiveTopology::TriangleList, // 1.
+                        strip_index_format: None,
+                        front_face: wgpu::FrontFace::Ccw, // 2.
+                        cull_mode: Some(wgpu::Face::Back),
+                        // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
+                        polygon_mode: wgpu::PolygonMode::Fill,
+                        // Requires Features::DEPTH_CLAMPING
+                        clamp_depth: false,
+                        // Requires Features::CONSERVATIVE_RASTERIZATION
+                        conservative: false,
+                    },
+                    depth_stencil: Some(wgpu::DepthStencilState {
+                        format: DepthTexture::DEPTH_FORMAT,
+                        depth_write_enabled: true,
+                        depth_compare: wgpu::CompareFunction::GreaterEqual, // 1.
+                        stencil: wgpu::StencilState::default(),             // 2.
+                        bias: wgpu::DepthBiasState::default(),
+                    }),
+                    multisample: wgpu::MultisampleState {
+                        count: 1,                         // 2.
+                        mask: !0,                         // 3.
+                        alpha_to_coverage_enabled: false, // 4.
+                    },
+                });
+
         let sampler = context.device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
@@ -350,10 +345,9 @@ impl TextureRenderer {
         });
 
         TextureRenderer {
-            shader,
+            render_pipeline,
             sampler,
             texture_bind_group_layout,
-            render_pipeline_layout,
             vertex_buffer: vec![],
         }
     }
@@ -451,7 +445,7 @@ impl TextureRenderer {
 
         for (vertex_buffer, texture, indices, index_buffer) in &self.vertex_buffer {
             let indice_count = indices.len() as u32;
-            render_pass.set_pipeline(&texture.render_pipeline);
+            render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);
             render_pass.set_bind_group(1, &texture.texture_bind_group, &[]);
             render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
