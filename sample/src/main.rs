@@ -74,7 +74,7 @@ fn main() {
                         },
                     );
                     graphics.draw_rect(
-                        [50, 50, 100, 100],
+                        [50, 50, 150, 150],
                         Color {
                             r: 1.0,
                             g: 0.0,
@@ -104,7 +104,7 @@ fn main() {
                         },
                     );
                     graphics.draw_rect(
-                        [0, 160, 240, 120],
+                        [0, 160, 240, 360],
                         Color {
                             r: 0.1,
                             g: 0.2,
@@ -112,7 +112,7 @@ fn main() {
                             a: 1.0,
                         },
                     );
-                    graphics.draw_sprite_in_rect(&alien_1, [211, 100, 134, 188]);
+                    graphics.draw_sprite_in_rect(&alien_1, [211, 100, 345, 288]);
                     graphics.draw_sprite(
                         &alien_1,
                         Position {

@@ -6,7 +6,8 @@ use wgpu::{
 };
 
 use crate::{
-    camera::Camera, shape, Canvas, DepthTexture, DrawTextureOperation, Rect, Size, WgpuContext,
+    camera::Camera, shape, Canvas, DepthTexture, DrawTextureOperation, OperationBlock, Rect, Size,
+    WgpuContext,
 };
 
 pub struct Sprite {
@@ -240,7 +241,6 @@ pub(crate) struct TextureRenderer {
     render_pipeline: RenderPipeline,
     sampler: Sampler,
     texture_bind_group_layout: BindGroupLayout,
-    vertex_buffer: Vec<(Buffer, Rc<Texture>, Vec<u16>, Buffer)>,
 }
 
 impl TextureRenderer {
@@ -330,13 +330,7 @@ impl TextureRenderer {
                         // Requires Features::CONSERVATIVE_RASTERIZATION
                         conservative: false,
                     },
-                    depth_stencil: Some(wgpu::DepthStencilState {
-                        format: DepthTexture::DEPTH_FORMAT,
-                        depth_write_enabled: true,
-                        depth_compare: wgpu::CompareFunction::GreaterEqual, // 1.
-                        stencil: wgpu::StencilState::default(),             // 2.
-                        bias: wgpu::DepthBiasState::default(),
-                    }),
+                    depth_stencil: None,
                     multisample: wgpu::MultisampleState {
                         count: 1,                         // 2.
                         mask: !0,                         // 3.
@@ -358,19 +352,20 @@ impl TextureRenderer {
             render_pipeline,
             sampler,
             texture_bind_group_layout,
-            vertex_buffer: vec![],
         }
     }
 
     pub(crate) fn render<'a>(
-        &'a mut self,
+        &'a self,
         render_pass: &mut RenderPass<'a>,
         context: &'a WgpuContext,
         camera: &'a Camera,
-        operations: &Vec<DrawTextureOperation>,
+        operation_block: &'a mut OperationBlock,
     ) {
-        self.vertex_buffer.clear();
-        let sorted_op = operations.iter().into_group_map_by(|op| op.index);
+        let sorted_op = operation_block
+            .draw_texture_operations
+            .iter()
+            .into_group_map_by(|op| op.index);
         for key in sorted_op.keys().into_iter().sorted() {
             if let Some(operations) = sorted_op.get(key) {
                 let texture = match operations.first() {
@@ -448,12 +443,13 @@ impl TextureRenderer {
                             contents: bytemuck::cast_slice(&indices[..]),
                             usage: wgpu::BufferUsages::INDEX,
                         });
-                self.vertex_buffer
+                operation_block
+                    .vertex_buffer
                     .push((vertex_buffer, texture, indices, index_buffer));
             }
         }
 
-        for (vertex_buffer, texture, indices, index_buffer) in &self.vertex_buffer {
+        for (vertex_buffer, texture, indices, index_buffer) in &operation_block.vertex_buffer {
             let indice_count = indices.len() as u32;
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);

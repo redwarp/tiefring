@@ -7,7 +7,7 @@ use sprite::{Sprite, Texture, TextureId, TextureRenderer};
 use thiserror::Error;
 
 pub use wgpu::Color;
-use wgpu::{CommandEncoder, RenderPass, SurfaceError, TextureView};
+use wgpu::{Buffer, CommandEncoder, RenderPass, SurfaceError, TextureView};
 
 mod camera;
 mod shape;
@@ -61,6 +61,7 @@ impl Canvas {
     where
         F: FnOnce(&mut Graphics),
     {
+        self.graphics.reset();
         let mut encoder: CommandEncoder =
             self.wgpu_context
                 .device
@@ -69,15 +70,15 @@ impl Canvas {
                 });
 
         draw_function(&mut self.graphics);
+        if let Some(operation_block) = self.graphics.current_operation_block.take() {
+            self.graphics.operation_blocks.push(operation_block);
+        }
 
         let surface_texture = self
             .wgpu_context
             .surface
             .get_current_texture()
             .map_err(|error: SurfaceError| Error::RenderingFailed(error))?;
-        // let view = surface_texture
-        //     .texture
-        //     .create_view(&wgpu::TextureViewDescriptor::default());
         let view = self
             .wgpu_context
             .buffer_texture
@@ -95,14 +96,7 @@ impl Canvas {
                         store: true,
                     },
                 }],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &depth_view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(-100.0),
-                        store: true,
-                    }),
-                    stencil_ops: None,
-                }),
+                depth_stencil_attachment: None,
             });
 
             self.handle_draw_operations(&mut render_pass);
@@ -217,20 +211,26 @@ impl Canvas {
     }
 
     fn handle_draw_operations<'a>(&'a mut self, render_pass: &mut RenderPass<'a>) {
-        self.color_renderer.render(
-            render_pass,
-            &self.wgpu_context,
-            &self.camera,
-            &self.graphics.draw_rect_operations,
-        );
-        self.texture_renderer.render(
-            render_pass,
-            &self.wgpu_context,
-            &self.camera,
-            &mut self.graphics.draw_texture_operations,
-        );
-
-        self.graphics.reset();
+        for operation_block in self.graphics.operation_blocks.iter_mut() {
+            match operation_block.operation_type {
+                OperationType::DrawRect => {
+                    self.color_renderer.render(
+                        render_pass,
+                        &self.wgpu_context,
+                        &self.camera,
+                        operation_block,
+                    );
+                }
+                OperationType::DrawTexture(_) => {
+                    self.texture_renderer.render(
+                        render_pass,
+                        &self.wgpu_context,
+                        &self.camera,
+                        operation_block,
+                    );
+                }
+            }
+        }
     }
 }
 
@@ -260,25 +260,47 @@ pub enum CanvasZero {
 
 pub struct Graphics {
     index: u16,
-    previous_operation: Option<OperationType>,
     draw_rect_operations: Vec<DrawRectOperation>,
     draw_texture_operations: Vec<DrawTextureOperation>,
+    current_operation_block: Option<OperationBlock>,
+    operation_blocks: Vec<OperationBlock>,
+}
+
+struct OperationBlock {
+    operation_type: OperationType,
+    draw_rect_operations: Vec<DrawRectOperation>,
+    draw_texture_operations: Vec<DrawTextureOperation>,
+    draw_rect_stuff: Option<(Buffer, Buffer)>,
+    vertex_buffer: Vec<(Buffer, Rc<Texture>, Vec<u16>, Buffer)>,
+}
+
+impl OperationBlock {
+    fn new(operation_type: OperationType) -> Self {
+        OperationBlock {
+            operation_type,
+            draw_rect_operations: Vec::new(),
+            draw_texture_operations: Vec::new(),
+            draw_rect_stuff: None,
+            vertex_buffer: Vec::new(),
+        }
+    }
 }
 
 impl Graphics {
     fn new() -> Self {
         Graphics {
             index: 0,
-            previous_operation: None,
             draw_rect_operations: vec![],
             draw_texture_operations: vec![],
+            current_operation_block: None,
+            operation_blocks: Vec::new(),
         }
     }
 
     pub fn draw_rect<R: Into<Rect>>(&mut self, rect: R, color: Color) {
-        let index = self.next_index(OperationType::DrawRect);
-        self.draw_rect_operations
-            .push(DrawRectOperation(index, rect.into(), color));
+        self.get_operation_block(OperationType::DrawRect)
+            .draw_rect_operations
+            .push(DrawRectOperation(0, rect.into(), color));
     }
 
     pub fn draw_sprite(&mut self, sprite: &Sprite, position: Position) {
@@ -292,32 +314,43 @@ impl Graphics {
     }
 
     pub fn draw_sprite_in_rect<R: Into<Rect>>(&mut self, sprite: &Sprite, rect: R) {
-        let index = self.next_index(OperationType::DrawTexture(sprite.texture.id));
         let tex_coords = sprite.tex_coords;
         let destination = rect.into();
         let texture = sprite.texture.clone();
-        self.draw_texture_operations.push(DrawTextureOperation {
-            index,
-            tex_coords,
-            destination,
-            texture,
-        });
+        self.get_operation_block(OperationType::DrawTexture(sprite.texture.id))
+            .draw_texture_operations
+            .push(DrawTextureOperation {
+                index: 0,
+                tex_coords,
+                destination,
+                texture,
+            });
     }
 
     fn reset(&mut self) {
         self.index = 0;
         self.draw_rect_operations.clear();
         self.draw_texture_operations.clear();
+        self.current_operation_block = None;
+        self.operation_blocks.clear();
     }
 
-    fn next_index(&mut self, current_operation: OperationType) -> u16 {
-        if let Some(previous_operation) = &self.previous_operation {
-            if previous_operation != &current_operation {
-                self.index += 1;
+    fn get_operation_block(&mut self, current_operation: OperationType) -> &mut OperationBlock {
+        let need_new = match &self.current_operation_block {
+            Some(operation_block) if operation_block.operation_type == current_operation => false,
+            _ => true,
+        };
+
+        if need_new {
+            if let Some(operation_block) = self.current_operation_block.take() {
+                self.operation_blocks.push(operation_block);
             }
+
+            let operation_block = OperationBlock::new(current_operation);
+            self.current_operation_block = Some(operation_block);
         }
-        self.previous_operation = Some(current_operation);
-        self.index
+
+        self.current_operation_block.as_mut().unwrap()
     }
 }
 

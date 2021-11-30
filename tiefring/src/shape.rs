@@ -1,6 +1,6 @@
 use wgpu::{util::DeviceExt, Buffer, Color, RenderPass, RenderPipeline};
 
-use crate::{camera::Camera, DepthTexture, DrawRectOperation, WgpuContext};
+use crate::{camera::Camera, DepthTexture, DrawRectOperation, OperationBlock, WgpuContext};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -96,13 +96,7 @@ impl ColorRenderer {
                         // Requires Features::CONSERVATIVE_RASTERIZATION
                         conservative: false,
                     },
-                    depth_stencil: Some(wgpu::DepthStencilState {
-                        format: DepthTexture::DEPTH_FORMAT,
-                        depth_write_enabled: true,
-                        depth_compare: wgpu::CompareFunction::GreaterEqual, // 1.
-                        stencil: wgpu::StencilState::default(),             // 2.
-                        bias: wgpu::DepthBiasState::default(),
-                    }),
+                    depth_stencil: None,
                     multisample: wgpu::MultisampleState {
                         count: 1,                         // 2.
                         mask: !0,                         // 3.
@@ -117,13 +111,14 @@ impl ColorRenderer {
     }
 
     pub(crate) fn render<'a>(
-        &'a mut self,
+        &'a self,
         render_pass: &mut RenderPass<'a>,
         context: &WgpuContext,
         camera: &'a Camera,
-        operations: &[DrawRectOperation],
+        operation_block: &'a mut OperationBlock,
     ) {
-        let vertices: Vec<_> = operations
+        let vertices: Vec<_> = operation_block
+            .draw_rect_operations
             .iter()
             .flat_map(|&DrawRectOperation(index, rect, color)| {
                 let color: [f32; 4] = color_to_float_array(color);
@@ -149,7 +144,7 @@ impl ColorRenderer {
             })
             .collect();
 
-        let indices: Vec<u16> = (0..operations.len())
+        let indices: Vec<u16> = (0..operation_block.draw_rect_operations.len())
             .flat_map(|index| {
                 let step: u16 = index as u16 * 4;
                 [step + 0, step + 1, step + 2, step + 2, step + 3, step + 0]
@@ -171,9 +166,9 @@ impl ColorRenderer {
                 usage: wgpu::BufferUsages::INDEX,
             });
 
-        self.vertex_buffer = Some((vertex_buffer, index_buffer));
+        operation_block.draw_rect_stuff = Some((vertex_buffer, index_buffer));
 
-        if let Some((vertex_buffer, index_buffer)) = &self.vertex_buffer {
+        if let Some((vertex_buffer, index_buffer)) = &operation_block.draw_rect_stuff {
             let count = indices.len() as u32;
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);
