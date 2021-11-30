@@ -20,7 +20,7 @@ use Option;
 
 const WIDTH: u8 = 30;
 const HEIGHT: u8 = 20;
-const GRID_STEP: f32 = 25.0;
+const GRID_STEP: f32 = 32.0;
 
 pub enum Input {
     Up,
@@ -114,28 +114,6 @@ struct Snake {
     direction: Direction,
 }
 
-#[derive(PartialEq)]
-struct Segment {
-    position: Position,
-    was_food: bool,
-}
-
-impl Segment {
-    fn new(x: i32, y: i32) -> Self {
-        Self {
-            position: Position::new(x, y),
-            was_food: false,
-        }
-    }
-
-    fn moved(&self, direction: Direction) -> Self {
-        Self {
-            position: self.position.moved(direction),
-            was_food: false,
-        }
-    }
-}
-
 impl Snake {
     fn new(x: i32, y: i32) -> Self {
         let mut body = VecDeque::new();
@@ -149,10 +127,6 @@ impl Snake {
 
     fn head(&self) -> &Segment {
         self.body.front().expect("The snake has not body")
-    }
-
-    fn head_mut(&mut self) -> &mut Segment {
-        self.body.front_mut().expect("The snake has not body")
     }
 
     fn is_eating_itself(&self) -> bool {
@@ -192,8 +166,6 @@ impl Snake {
         self.body.push_front(new_head);
         if !self.is_eating(food) {
             self.body.pop_back();
-        } else {
-            self.head_mut().was_food = true;
         }
     }
 
@@ -223,11 +195,7 @@ impl Snake {
             .enumerate()
             .map(|(index, segment)| {
                 let Position { x, y } = segment.position;
-                let step = if segment.was_food {
-                    0.0
-                } else {
-                    step * index as f32
-                };
+                let step = step * index as f32;
                 Rect::square(
                     (x as f32 + 0.05 + step) * GRID_STEP,
                     (y as f32 + 0.05 + step) * GRID_STEP,
@@ -250,6 +218,45 @@ impl Snake {
     }
 }
 
+#[derive(PartialEq)]
+struct Segment {
+    position: Position,
+}
+
+impl Segment {
+    fn new(x: i32, y: i32) -> Self {
+        Self {
+            position: Position::new(x, y),
+        }
+    }
+
+    fn moved(&self, direction: Direction) -> Self {
+        Self {
+            position: self.position.moved(direction),
+        }
+    }
+}
+
+struct Terrain {
+    tiles: Vec<usize>,
+}
+
+impl Terrain {
+    fn new((width, height): (u8, u8), grass: &TileSet) -> Self {
+        let (tile_count, _) = grass.tile_count();
+        let tile_count = tile_count as usize;
+        let mut rng = rand::thread_rng();
+        let capacity = width as usize * height as usize;
+
+        let tiles = (0..capacity)
+            .into_iter()
+            .map(|_| rng.gen_range(0..tile_count))
+            .collect();
+
+        Self { tiles }
+    }
+}
+
 enum State {
     Playing,
     Losing,
@@ -268,8 +275,12 @@ impl Sprites {
             .unwrap();
         Self {
             start: Sprite::load_image(canvas, sprites.join("start.png")).unwrap(),
-            grass: TileSet::load_image(canvas, sprites.join("grass.png"), Size::new(25, 25))
-                .unwrap(),
+            grass: TileSet::load_image(
+                canvas,
+                sprites.join("grass.png"),
+                Size::new(GRID_STEP as u32, GRID_STEP as u32),
+            )
+            .unwrap(),
         }
     }
 }
@@ -321,6 +332,7 @@ struct PlayingScene {
     score: u32,
     pending_input: Option<Input>,
     sprites: Rc<Sprites>,
+    terrain: Terrain,
 }
 
 impl PlayingScene {
@@ -329,6 +341,7 @@ impl PlayingScene {
         let food = Food::generate_food(width, height, &snake);
         let dt = Duration::new(0, 0);
         let score = 0;
+        let terrain = Terrain::new((width, height), &sprites.grass);
 
         Self {
             size: (width, height),
@@ -338,6 +351,7 @@ impl PlayingScene {
             score,
             pending_input: None,
             sprites,
+            terrain,
         }
     }
 
@@ -370,14 +384,17 @@ impl PlayingScene {
 impl Scene for PlayingScene {
     fn render(&self, graphics: &mut Graphics) {
         println!("Drawing background of {:?}", self.size);
-        let grasses: Vec<_> = (0..4)
+        let (tile_count, _) = self.sprites.grass.tile_count();
+        let grasses: Vec<_> = (0..tile_count)
             .map(|index| self.sprites.grass.sprite(index, 0))
             .collect();
         for i in 0..self.size.0 {
             for j in 0..self.size.1 {
-                let sprite_index = (i + j) as usize % 3;
+                let sprite_index = i as usize + j as usize * self.size.0 as usize;
                 graphics.draw_sprite(
-                    unsafe { grasses.get_unchecked(sprite_index) },
+                    unsafe {
+                        grasses.get_unchecked(*self.terrain.tiles.get_unchecked(sprite_index))
+                    },
                     tiefring::Position {
                         top: j as f32 * GRID_STEP,
                         left: i as f32 * GRID_STEP,
@@ -445,7 +462,7 @@ impl Game {
         self.scene.render(graphics);
     }
 
-    fn update(&mut self, dt: Duration, input: Option<Input>, canvas: &mut Canvas) -> bool {
+    fn update(&mut self, dt: Duration, input: Option<Input>) -> bool {
         let result = self.scene.update(dt, input);
         match result {
             Some(State::Starting) => {
@@ -538,7 +555,7 @@ fn main() {
             let dt = now.duration_since(time);
             time = now;
 
-            game.update(dt, keyboard_input, &mut canvas);
+            game.update(dt, keyboard_input);
 
             window.request_redraw();
         }

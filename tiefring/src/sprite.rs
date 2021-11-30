@@ -20,7 +20,12 @@ impl Sprite {
     where
         S: Into<Size> + Copy,
     {
-        let texture = Rc::new(Texture::new(canvas, rgba, dimensions));
+        let texture = Rc::new(Texture::new(
+            &canvas.wgpu_context,
+            &canvas.texture_renderer,
+            rgba,
+            dimensions.into(),
+        ));
         let tex_coord = Rect {
             left: 0.0,
             top: 0.0,
@@ -64,7 +69,12 @@ impl TileSet {
         S: Into<Size> + Copy,
         TS: Into<Size> + Copy,
     {
-        let texture = Rc::new(Texture::new(canvas, rgba, dimensions));
+        let texture = Rc::new(Texture::new(
+            &canvas.wgpu_context,
+            &canvas.texture_renderer,
+            rgba,
+            dimensions.into(),
+        ));
 
         TileSet {
             dimensions: dimensions.into(),
@@ -125,17 +135,20 @@ pub(crate) struct Texture {
 }
 
 impl Texture {
-    fn new<S: Into<Size>>(canvas: &Canvas, rgba: &[u8], dimensions: S) -> Self {
+    fn new(
+        wgpu_context: &WgpuContext,
+        texture_renderer: &TextureRenderer,
+        rgba: &[u8],
+        dimensions: Size,
+    ) -> Self {
         static INDEX: AtomicU32 = AtomicU32::new(0);
         let id = INDEX.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let dimensions: Size = dimensions.into();
         let texture_size = wgpu::Extent3d {
             width: dimensions.width,
             height: dimensions.height,
             depth_or_array_layers: 1,
         };
-        let wgpu_texture = canvas
-            .wgpu_context
+        let wgpu_texture = wgpu_context
             .device
             .create_texture(&wgpu::TextureDescriptor {
                 size: texture_size,
@@ -147,7 +160,7 @@ impl Texture {
                 label: Some("texture"),
             });
 
-        canvas.wgpu_context.queue.write_texture(
+        wgpu_context.queue.write_texture(
             // Tells wgpu where to copy the pixel data
             wgpu::ImageCopyTexture {
                 texture: &wgpu_texture,
@@ -169,11 +182,10 @@ impl Texture {
         let texture_view = wgpu_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         let texture_bind_group: BindGroup =
-            canvas
-                .wgpu_context
+            wgpu_context
                 .device
                 .create_bind_group(&wgpu::BindGroupDescriptor {
-                    layout: &canvas.texture_renderer.texture_bind_group_layout,
+                    layout: &texture_renderer.texture_bind_group_layout,
                     entries: &[
                         wgpu::BindGroupEntry {
                             binding: 0,
@@ -181,9 +193,7 @@ impl Texture {
                         },
                         wgpu::BindGroupEntry {
                             binding: 1,
-                            resource: wgpu::BindingResource::Sampler(
-                                &canvas.texture_renderer.sampler,
-                            ),
+                            resource: wgpu::BindingResource::Sampler(&texture_renderer.sampler),
                         },
                     ],
                     label: Some("diffuse_bind_group"),
