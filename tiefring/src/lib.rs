@@ -85,7 +85,6 @@ impl Canvas {
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         {
-            let depth_view = self.wgpu_context.depth_texture.view.clone();
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[wgpu::RenderPassColorAttachment {
@@ -270,8 +269,8 @@ struct OperationBlock {
     operation_type: OperationType,
     draw_rect_operations: Vec<DrawRectOperation>,
     draw_texture_operations: Vec<DrawTextureOperation>,
-    draw_rect_stuff: Option<(Buffer, Buffer)>,
-    vertex_buffer: Vec<(Buffer, Rc<Texture>, Vec<u16>, Buffer)>,
+    draw_rect_buffers: Option<(Buffer, Buffer)>,
+    draw_texture_buffers: Vec<(Buffer, Rc<Texture>, Vec<u16>, Buffer)>,
 }
 
 impl OperationBlock {
@@ -280,8 +279,8 @@ impl OperationBlock {
             operation_type,
             draw_rect_operations: Vec::new(),
             draw_texture_operations: Vec::new(),
-            draw_rect_stuff: None,
-            vertex_buffer: Vec::new(),
+            draw_rect_buffers: None,
+            draw_texture_buffers: Vec::new(),
         }
     }
 }
@@ -300,7 +299,7 @@ impl Graphics {
     pub fn draw_rect<R: Into<Rect>>(&mut self, rect: R, color: Color) {
         self.get_operation_block(OperationType::DrawRect)
             .draw_rect_operations
-            .push(DrawRectOperation(0, rect.into(), color));
+            .push(DrawRectOperation(rect.into(), color));
     }
 
     pub fn draw_sprite(&mut self, sprite: &Sprite, position: Position) {
@@ -320,7 +319,6 @@ impl Graphics {
         self.get_operation_block(OperationType::DrawTexture(sprite.texture.id))
             .draw_texture_operations
             .push(DrawTextureOperation {
-                index: 0,
                 tex_coords,
                 destination,
                 texture,
@@ -360,10 +358,9 @@ enum OperationType {
     DrawTexture(TextureId),
 }
 
-pub(crate) struct DrawRectOperation(u16, Rect, Color);
+pub(crate) struct DrawRectOperation(Rect, Color);
 
 pub(crate) struct DrawTextureOperation {
-    pub index: u16,
     pub tex_coords: Rect,
     pub destination: Rect,
     pub texture: Rc<Texture>,

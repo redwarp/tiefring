@@ -1,11 +1,11 @@
-use wgpu::{util::DeviceExt, Buffer, Color, RenderPass, RenderPipeline};
+use wgpu::{util::DeviceExt, Color, RenderPass, RenderPipeline};
 
-use crate::{camera::Camera, DepthTexture, DrawRectOperation, OperationBlock, WgpuContext};
+use crate::{camera::Camera, DrawRectOperation, OperationBlock, WgpuContext};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct ColorVertex {
-    position: [f32; 3],
+    position: [f32; 2],
     color: [f32; 4],
 }
 
@@ -18,10 +18,10 @@ impl ColorVertex {
                 wgpu::VertexAttribute {
                     offset: 0,
                     shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
+                    format: wgpu::VertexFormat::Float32x2,
                 },
                 wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    offset: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
                     shader_location: 1,
                     format: wgpu::VertexFormat::Float32x4,
                 },
@@ -41,7 +41,6 @@ fn color_to_float_array(color: Color) -> [f32; 4] {
 
 pub(crate) struct ColorRenderer {
     render_pipeline: RenderPipeline,
-    vertex_buffer: Option<(Buffer, Buffer)>,
 }
 
 impl ColorRenderer {
@@ -104,10 +103,7 @@ impl ColorRenderer {
                     },
                 });
 
-        ColorRenderer {
-            render_pipeline,
-            vertex_buffer: None,
-        }
+        ColorRenderer { render_pipeline }
     }
 
     pub(crate) fn render<'a>(
@@ -120,24 +116,23 @@ impl ColorRenderer {
         let vertices: Vec<_> = operation_block
             .draw_rect_operations
             .iter()
-            .flat_map(|&DrawRectOperation(index, rect, color)| {
+            .flat_map(|&DrawRectOperation(rect, color)| {
                 let color: [f32; 4] = color_to_float_array(color);
-                let depth = depth(index);
                 [
                     ColorVertex {
-                        position: [rect.left as f32, rect.top as f32, depth],
+                        position: [rect.left as f32, rect.top as f32],
                         color: color,
                     },
                     ColorVertex {
-                        position: [rect.left as f32, rect.bottom as f32, depth],
+                        position: [rect.left as f32, rect.bottom as f32],
                         color: color,
                     },
                     ColorVertex {
-                        position: [rect.right as f32, rect.bottom as f32, depth],
+                        position: [rect.right as f32, rect.bottom as f32],
                         color: color,
                     },
                     ColorVertex {
-                        position: [rect.right as f32, rect.top as f32, depth],
+                        position: [rect.right as f32, rect.top as f32],
                         color: color,
                     },
                 ]
@@ -166,9 +161,9 @@ impl ColorRenderer {
                 usage: wgpu::BufferUsages::INDEX,
             });
 
-        operation_block.draw_rect_stuff = Some((vertex_buffer, index_buffer));
+        operation_block.draw_rect_buffers = Some((vertex_buffer, index_buffer));
 
-        if let Some((vertex_buffer, index_buffer)) = &operation_block.draw_rect_stuff {
+        if let Some((vertex_buffer, index_buffer)) = &operation_block.draw_rect_buffers {
             let count = indices.len() as u32;
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);
@@ -177,9 +172,4 @@ impl ColorRenderer {
             render_pass.draw_indexed(0..count, 0, 0..1);
         }
     }
-}
-
-pub(crate) fn depth(index: u16) -> f32 {
-    let depth = 1.0 - (index as f32 / 0xffff as f32);
-    depth
 }

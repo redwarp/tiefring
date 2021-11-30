@@ -1,14 +1,8 @@
 use std::{path::Path, rc::Rc, sync::atomic::AtomicU32};
 
-use itertools::Itertools;
-use wgpu::{
-    util::DeviceExt, BindGroup, BindGroupLayout, Buffer, RenderPass, RenderPipeline, Sampler,
-};
+use wgpu::{util::DeviceExt, BindGroup, BindGroupLayout, RenderPass, RenderPipeline, Sampler};
 
-use crate::{
-    camera::Camera, shape, Canvas, DepthTexture, DrawTextureOperation, OperationBlock, Rect, Size,
-    WgpuContext,
-};
+use crate::{camera::Camera, Canvas, OperationBlock, Rect, Size, WgpuContext};
 
 pub struct Sprite {
     pub dimensions: Size,
@@ -211,7 +205,7 @@ impl Texture {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub(crate) struct TextureVertex {
-    position: [f32; 3],
+    position: [f32; 2],
     tex_coords: [f32; 2],
 }
 
@@ -225,10 +219,10 @@ impl TextureVertex {
                 wgpu::VertexAttribute {
                     offset: 0,
                     shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
+                    format: wgpu::VertexFormat::Float32x2,
                 },
                 wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    offset: mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
                     shader_location: 1,
                     format: wgpu::VertexFormat::Float32x2, // NEW!
                 },
@@ -362,94 +356,63 @@ impl TextureRenderer {
         camera: &'a Camera,
         operation_block: &'a mut OperationBlock,
     ) {
-        let sorted_op = operation_block
+        let texture = match operation_block.draw_texture_operations.first() {
+            Some(operation) => operation.texture.clone(),
+            None => return,
+        };
+
+        let vertices: Vec<_> = operation_block
             .draw_texture_operations
             .iter()
-            .into_group_map_by(|op| op.index);
-        for key in sorted_op.keys().into_iter().sorted() {
-            if let Some(operations) = sorted_op.get(key) {
-                let texture = match operations.first() {
-                    Some(operation) => operation.texture.clone(),
-                    None => continue,
-                };
+            .flat_map(|operation| {
+                [
+                    TextureVertex {
+                        position: [operation.destination.left, operation.destination.top],
+                        tex_coords: [operation.tex_coords.left, operation.tex_coords.top],
+                    },
+                    TextureVertex {
+                        position: [operation.destination.left, operation.destination.bottom],
+                        tex_coords: [operation.tex_coords.left, operation.tex_coords.bottom],
+                    },
+                    TextureVertex {
+                        position: [operation.destination.right, operation.destination.bottom],
+                        tex_coords: [operation.tex_coords.right, operation.tex_coords.bottom],
+                    },
+                    TextureVertex {
+                        position: [operation.destination.right, operation.destination.top],
+                        tex_coords: [operation.tex_coords.right, operation.tex_coords.top],
+                    },
+                ]
+            })
+            .collect();
 
-                let vertices: Vec<_> = operations
-                    .iter()
-                    .flat_map(|operation| {
-                        let depth = shape::depth(operation.index);
-                        [
-                            TextureVertex {
-                                position: [
-                                    operation.destination.left,
-                                    operation.destination.top,
-                                    depth,
-                                ],
-                                tex_coords: [operation.tex_coords.left, operation.tex_coords.top],
-                            },
-                            TextureVertex {
-                                position: [
-                                    operation.destination.left,
-                                    operation.destination.bottom,
-                                    depth,
-                                ],
-                                tex_coords: [
-                                    operation.tex_coords.left,
-                                    operation.tex_coords.bottom,
-                                ],
-                            },
-                            TextureVertex {
-                                position: [
-                                    operation.destination.right,
-                                    operation.destination.bottom,
-                                    depth,
-                                ],
-                                tex_coords: [
-                                    operation.tex_coords.right,
-                                    operation.tex_coords.bottom,
-                                ],
-                            },
-                            TextureVertex {
-                                position: [
-                                    operation.destination.right,
-                                    operation.destination.top,
-                                    depth,
-                                ],
-                                tex_coords: [operation.tex_coords.right, operation.tex_coords.top],
-                            },
-                        ]
-                    })
-                    .collect();
+        let indices: Vec<u16> = (0..operation_block.draw_texture_operations.len())
+            .flat_map(|index| {
+                let step: u16 = index as u16 * 4;
+                [step + 0, step + 1, step + 2, step + 2, step + 3, step + 0]
+            })
+            .collect();
 
-                let indices: Vec<u16> = (0..operations.len())
-                    .flat_map(|index| {
-                        let step: u16 = index as u16 * 4;
-                        [step + 0, step + 1, step + 2, step + 2, step + 3, step + 0]
-                    })
-                    .collect();
+        let vertex_buffer = context
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(&vertices[..]),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+        let index_buffer = context
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(&indices[..]),
+                usage: wgpu::BufferUsages::INDEX,
+            });
+        operation_block
+            .draw_texture_buffers
+            .push((vertex_buffer, texture, indices, index_buffer));
 
-                let vertex_buffer =
-                    context
-                        .device
-                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                            label: Some("Vertex Buffer"),
-                            contents: bytemuck::cast_slice(&vertices[..]),
-                            usage: wgpu::BufferUsages::VERTEX,
-                        });
-                let index_buffer =
-                    context
-                        .device
-                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                            label: Some("Index Buffer"),
-                            contents: bytemuck::cast_slice(&indices[..]),
-                            usage: wgpu::BufferUsages::INDEX,
-                        });
-                operation_block
-                    .vertex_buffer
-                    .push((vertex_buffer, texture, indices, index_buffer));
-            }
-        }
-
-        for (vertex_buffer, texture, indices, index_buffer) in &operation_block.vertex_buffer {
+        for (vertex_buffer, texture, indices, index_buffer) in &operation_block.draw_texture_buffers
+        {
             let indice_count = indices.len() as u32;
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);
