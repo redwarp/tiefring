@@ -32,12 +32,7 @@ impl Font {
         self.prepare_chars(px, text, &canvas.wgpu_context, &canvas.text_context);
     }
 
-    fn get_font_for_px(
-        &mut self,
-        px: u32,
-        wgpu_context: &WgpuContext,
-        text_context: &TextContext,
-    ) -> Rc<RefCell<FontForPx>> {
+    pub(crate) fn get_font_for_px(&mut self, px: u32) -> Rc<RefCell<FontForPx>> {
         self.font_cache
             .entry(px)
             .or_insert_with(|| Rc::new(RefCell::new(FontForPx::new(px))))
@@ -307,7 +302,7 @@ impl TextContext {
     }
 }
 
-struct TextRenderer {
+pub(crate) struct TextRenderer {
     render_pipeline: RenderPipeline,
 }
 

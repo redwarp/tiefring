@@ -1,14 +1,14 @@
-use std::{path::Path, rc::Rc};
+use std::{cell::RefCell, path::Path, rc::Rc};
 
 use camera::Camera;
 use raw_window_handle::HasRawWindowHandle;
 use shape::ColorRenderer;
 use sprite::{Sprite, Texture, TextureId, TextureRenderer};
-use text::{Font, FontForPx, TextContext};
+use text::{Font, FontForPx, TextContext, TextRenderer};
 use thiserror::Error;
 
 pub use wgpu::Color;
-use wgpu::{Buffer, CommandEncoder, RenderPass, SurfaceError, TextureView};
+use wgpu::{Buffer, CommandEncoder, RenderPass, SurfaceError};
 
 mod camera;
 mod shape;
@@ -32,6 +32,7 @@ pub struct Canvas {
     camera: Camera,
     pub(crate) canvas_settings: CanvasSettings,
     text_context: TextContext,
+    text_renderer: TextRenderer,
 }
 
 impl Canvas {
@@ -50,6 +51,7 @@ impl Canvas {
         let color_renderer = ColorRenderer::new(&wgpu_context, &camera);
         let texture_renderer = TextureRenderer::new(&wgpu_context, &camera);
         let text_context = TextContext::new(&wgpu_context);
+        let text_renderer = TextRenderer::new(&wgpu_context, &text_context, &camera);
         Ok(Canvas {
             wgpu_context,
             graphics,
@@ -58,6 +60,7 @@ impl Canvas {
             camera,
             canvas_settings,
             text_context,
+            text_renderer,
         })
     }
 
@@ -216,23 +219,24 @@ impl Canvas {
     fn handle_draw_operations<'a>(&'a mut self, render_pass: &mut RenderPass<'a>) {
         for operation_block in self.graphics.operation_blocks.iter_mut() {
             match operation_block.operation_type {
-                OperationType::DrawRect => {
-                    self.color_renderer.render(
-                        render_pass,
-                        &self.wgpu_context,
-                        &self.camera,
-                        operation_block,
-                    );
-                }
-                OperationType::DrawTexture(_) => {
-                    self.texture_renderer.render(
-                        render_pass,
-                        &self.wgpu_context,
-                        &self.camera,
-                        operation_block,
-                    );
-                }
-                OperationType::DrawText(_) => {}
+                OperationType::DrawRect => self.color_renderer.render(
+                    render_pass,
+                    &self.wgpu_context,
+                    &self.camera,
+                    operation_block,
+                ),
+                OperationType::DrawTexture(_) => self.texture_renderer.render(
+                    render_pass,
+                    &self.wgpu_context,
+                    &self.camera,
+                    operation_block,
+                ),
+                OperationType::DrawText(_) => self.text_renderer.render(
+                    render_pass,
+                    &self.wgpu_context,
+                    &self.camera,
+                    operation_block,
+                ),
             }
         }
     }
@@ -263,7 +267,6 @@ pub enum CanvasZero {
 }
 
 pub struct Graphics {
-    index: u16,
     draw_rect_operations: Vec<DrawRectOperation>,
     draw_texture_operations: Vec<DrawTextureOperation>,
     current_operation_block: Option<OperationBlock>,
@@ -276,6 +279,7 @@ struct OperationBlock {
     draw_texture_operations: Vec<DrawTextureOperation>,
     draw_rect_buffers: Option<(Buffer, Buffer)>,
     draw_texture_buffers: Vec<(Buffer, Rc<Texture>, Vec<u16>, Buffer)>,
+    draw_text_operations: DrawTextOperations,
 }
 
 impl OperationBlock {
@@ -286,6 +290,25 @@ impl OperationBlock {
             draw_texture_operations: Vec::new(),
             draw_rect_buffers: None,
             draw_texture_buffers: Vec::new(),
+            draw_text_operations: DrawTextOperations::new(),
+        }
+    }
+
+    fn push_draw_text_operation(&mut self, draw_text_operation: DrawTextOperation) {
+        self.draw_text_operations
+            .operations
+            .push(draw_text_operation);
+    }
+}
+
+struct DrawTextOperations {
+    operations: Vec<DrawTextOperation>,
+}
+
+impl DrawTextOperations {
+    fn new() -> Self {
+        Self {
+            operations: Vec::new(),
         }
     }
 }
@@ -293,7 +316,6 @@ impl OperationBlock {
 impl Graphics {
     fn new() -> Self {
         Graphics {
-            index: 0,
             draw_rect_operations: vec![],
             draw_texture_operations: vec![],
             current_operation_block: None,
@@ -332,16 +354,24 @@ impl Graphics {
 
     pub fn draw_text<T: Into<String>>(
         &mut self,
-        font: &Font,
+        font: &mut Font,
         text: T,
         px: u32,
         position: Position,
         color: Color,
     ) {
+        let text: String = text.into();
+        let font_for_px = font.get_font_for_px(px);
+        self.get_operation_block(OperationType::DrawText(TextureId(0)))
+            .push_draw_text_operation(DrawTextOperation {
+                font_for_px,
+                position,
+                text,
+                color,
+            });
     }
 
     fn reset(&mut self) {
-        self.index = 0;
         self.draw_rect_operations.clear();
         self.draw_texture_operations.clear();
         self.current_operation_block = None;
@@ -384,8 +414,9 @@ pub(crate) struct DrawTextureOperation {
 
 pub(crate) struct DrawTextOperation {
     pub position: Position,
-    pub font_for_px: Rc<FontForPx>,
+    pub font_for_px: Rc<RefCell<FontForPx>>,
     pub text: String,
+    pub color: Color,
 }
 
 #[derive(Clone, Copy)]
@@ -500,7 +531,6 @@ struct WgpuContext {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     size: Size,
-    depth_texture: DepthTexture,
     buffer_texture: wgpu::Texture,
 }
 
@@ -543,8 +573,6 @@ impl WgpuContext {
 
         let size = Size { width, height };
 
-        let depth_texture = DepthTexture::create_depth_texture(&device, &config, "depth_texture");
-
         let buffer_texture = device.create_texture(&wgpu::TextureDescriptor {
             size: wgpu::Extent3d {
                 width,
@@ -565,7 +593,6 @@ impl WgpuContext {
             config,
             queue,
             size,
-            depth_texture,
             buffer_texture,
         })
     }
@@ -575,8 +602,6 @@ impl WgpuContext {
         self.config.width = width;
         self.config.height = height;
         self.surface.configure(&self.device, &self.config);
-        self.depth_texture =
-            DepthTexture::create_depth_texture(&self.device, &self.config, "depth_texture");
         self.buffer_texture = self.device.create_texture(&wgpu::TextureDescriptor {
             size: wgpu::Extent3d {
                 width,
@@ -590,41 +615,5 @@ impl WgpuContext {
             usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT,
             label: None,
         });
-    }
-}
-
-struct DepthTexture {
-    view: Rc<TextureView>,
-}
-
-impl DepthTexture {
-    pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
-
-    pub fn create_depth_texture(
-        device: &wgpu::Device,
-        config: &wgpu::SurfaceConfiguration,
-        label: &str,
-    ) -> Self {
-        let size = wgpu::Extent3d {
-            // 2.
-            width: config.width,
-            height: config.height,
-            depth_or_array_layers: 1,
-        };
-        let desc = wgpu::TextureDescriptor {
-            label: Some(label),
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: Self::DEPTH_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT // 3.
-                | wgpu::TextureUsages::TEXTURE_BINDING,
-        };
-        let texture = device.create_texture(&desc);
-
-        let view = Rc::new(texture.create_view(&wgpu::TextureViewDescriptor::default()));
-
-        Self { view }
     }
 }
