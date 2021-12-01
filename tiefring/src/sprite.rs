@@ -1,4 +1,4 @@
-use std::{path::Path, rc::Rc, sync::atomic::AtomicU32};
+use std::{path::Path, rc::Rc, sync::atomic::AtomicUsize};
 
 use wgpu::{util::DeviceExt, BindGroup, BindGroupLayout, RenderPass, RenderPipeline, Sampler};
 
@@ -122,12 +122,15 @@ impl TileSet {
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
-pub(crate) struct TextureId(u32);
+pub(crate) struct TextureId(pub(crate) usize);
 
 pub(crate) struct Texture {
     pub id: TextureId,
+    pub texture: wgpu::Texture,
     pub texture_bind_group: BindGroup,
 }
+
+pub(crate) static TEXTURE_INDEX: AtomicUsize = AtomicUsize::new(0);
 
 impl Texture {
     fn new(
@@ -136,8 +139,7 @@ impl Texture {
         rgba: &[u8],
         dimensions: Size,
     ) -> Self {
-        static INDEX: AtomicU32 = AtomicU32::new(0);
-        let id = INDEX.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let id = TEXTURE_INDEX.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let texture_size = wgpu::Extent3d {
             width: dimensions.width,
             height: dimensions.height,
@@ -196,6 +198,7 @@ impl Texture {
 
         let texture = Texture {
             id: TextureId(id),
+            texture: wgpu_texture,
             texture_bind_group,
         };
         texture
@@ -233,8 +236,8 @@ impl TextureVertex {
 
 pub(crate) struct TextureRenderer {
     render_pipeline: RenderPipeline,
-    sampler: Sampler,
-    texture_bind_group_layout: BindGroupLayout,
+    pub(crate) sampler: Sampler,
+    pub(crate) texture_bind_group_layout: BindGroupLayout,
 }
 
 impl TextureRenderer {

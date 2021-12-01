@@ -1,5 +1,6 @@
 use tiefring::{
     sprite::{Sprite, TileSet},
+    text::Font,
     Canvas, CanvasSettings, Color, Position,
 };
 use winit::{
@@ -55,6 +56,9 @@ fn main() {
     let alien_3 = Sprite::load_image(&mut canvas, sprites.join("p3_stand.png")).unwrap();
     let tile_set =
         TileSet::load_image(&mut canvas, sprites.join("basictiles.png"), (16, 16)).unwrap();
+
+    let mut font = Font::load_font();
+    font.test(&canvas, 20, "Hello!");
 
     window.set_visible(true);
 

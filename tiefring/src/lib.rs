@@ -4,6 +4,7 @@ use camera::Camera;
 use raw_window_handle::HasRawWindowHandle;
 use shape::ColorRenderer;
 use sprite::{Sprite, Texture, TextureId, TextureRenderer};
+use text::{Font, FontForPx, TextContext};
 use thiserror::Error;
 
 pub use wgpu::Color;
@@ -30,6 +31,7 @@ pub struct Canvas {
     texture_renderer: TextureRenderer,
     camera: Camera,
     pub(crate) canvas_settings: CanvasSettings,
+    text_context: TextContext,
 }
 
 impl Canvas {
@@ -47,6 +49,7 @@ impl Canvas {
         let camera = Camera::new(&wgpu_context, width, height, &canvas_settings.canvas_zero);
         let color_renderer = ColorRenderer::new(&wgpu_context, &camera);
         let texture_renderer = TextureRenderer::new(&wgpu_context, &camera);
+        let text_context = TextContext::new(&wgpu_context);
         Ok(Canvas {
             wgpu_context,
             graphics,
@@ -54,6 +57,7 @@ impl Canvas {
             texture_renderer,
             camera,
             canvas_settings,
+            text_context,
         })
     }
 
@@ -228,6 +232,7 @@ impl Canvas {
                         operation_block,
                     );
                 }
+                OperationType::DrawText(_) => {}
             }
         }
     }
@@ -325,6 +330,16 @@ impl Graphics {
             });
     }
 
+    pub fn draw_text<T: Into<String>>(
+        &mut self,
+        font: &Font,
+        text: T,
+        px: u32,
+        position: Position,
+        color: Color,
+    ) {
+    }
+
     fn reset(&mut self) {
         self.index = 0;
         self.draw_rect_operations.clear();
@@ -356,6 +371,7 @@ impl Graphics {
 enum OperationType {
     DrawRect,
     DrawTexture(TextureId),
+    DrawText(TextureId),
 }
 
 pub(crate) struct DrawRectOperation(Rect, Color);
@@ -364,6 +380,12 @@ pub(crate) struct DrawTextureOperation {
     pub tex_coords: Rect,
     pub destination: Rect,
     pub texture: Rc<Texture>,
+}
+
+pub(crate) struct DrawTextOperation {
+    pub position: Position,
+    pub font_for_px: Rc<FontForPx>,
+    pub text: String,
 }
 
 #[derive(Clone, Copy)]
