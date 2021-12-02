@@ -58,7 +58,7 @@ fn main() {
         TileSet::load_image(&mut canvas, sprites.join("basictiles.png"), (16, 16)).unwrap();
 
     let mut font = Font::load_font();
-    font.test(&canvas, 20, "Hello!");
+    // font.test(&canvas, 20, "Hello!");
 
     window.set_visible(true);
 
@@ -146,6 +146,19 @@ fn main() {
                             top: 0.0,
                         },
                     );
+
+                    graphics.draw_text(
+                        &mut font,
+                        "Help",
+                        40,
+                        Position::new(0.0, 0.0),
+                        Color {
+                            r: 1.0,
+                            g: 0.0,
+                            b: 0.0,
+                            a: 1.0,
+                        },
+                    )
                 })
                 .unwrap();
         }

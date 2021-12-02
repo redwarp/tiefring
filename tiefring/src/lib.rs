@@ -234,8 +234,9 @@ impl Canvas {
                 OperationType::DrawText(_) => self.text_renderer.render(
                     render_pass,
                     &self.wgpu_context,
+                    &self.text_context,
                     &self.camera,
-                    operation_block,
+                    &mut operation_block.draw_text_operations,
                 ),
             }
         }
@@ -303,12 +304,14 @@ impl OperationBlock {
 
 struct DrawTextOperations {
     operations: Vec<DrawTextOperation>,
+    buffers: Option<(Rc<Texture>, Buffer, Buffer)>,
 }
 
 impl DrawTextOperations {
     fn new() -> Self {
         Self {
             operations: Vec::new(),
+            buffers: None,
         }
     }
 }
@@ -464,11 +467,6 @@ impl Rect {
     }
 }
 
-pub struct Position {
-    pub left: f32,
-    pub top: f32,
-}
-
 impl From<[i32; 4]> for Rect {
     fn from(coordinates: [i32; 4]) -> Self {
         Rect {
@@ -501,6 +499,17 @@ impl std::ops::Mul<f32> for &Rect {
             right: self.right * rhs,
             bottom: self.bottom * rhs,
         }
+    }
+}
+
+pub struct Position {
+    pub left: f32,
+    pub top: f32,
+}
+
+impl Position {
+    pub fn new(left: f32, top: f32) -> Self {
+        Self { left, top }
     }
 }
 

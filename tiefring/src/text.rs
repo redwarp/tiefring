@@ -1,19 +1,23 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{hash_map::Entry, HashMap},
+    rc::Rc,
+};
 
-use fontdue::Metrics;
+use fontdue::{LineMetrics, Metrics};
 
 use rect_packer::Packer;
-use wgpu::{BindGroup, BindGroupLayout, RenderPass, RenderPipeline, Sampler};
+use wgpu::{util::DeviceExt, BindGroup, BindGroupLayout, RenderPass, RenderPipeline, Sampler};
 
 use crate::{
     camera::Camera,
     sprite::Texture,
     sprite::{TextureId, TextureVertex, TEXTURE_INDEX},
-    Canvas, OperationBlock, Rect, WgpuContext,
+    Canvas, DrawTextOperations, OperationBlock, Position, Rect, WgpuContext,
 };
 
 pub struct Font {
-    font: fontdue::Font,
+    font: Rc<fontdue::Font>,
     font_cache: HashMap<u32, Rc<RefCell<FontForPx>>>,
 }
 
@@ -22,7 +26,8 @@ static CACHE_WIDTH: u32 = 1024;
 impl Font {
     pub fn load_font() -> Self {
         let font = include_bytes!("../../sample/fonts/Roboto-Regular.ttf") as &[u8];
-        let font = fontdue::Font::from_bytes(font, fontdue::FontSettings::default()).unwrap();
+        let font =
+            Rc::new(fontdue::Font::from_bytes(font, fontdue::FontSettings::default()).unwrap());
         let font_cache = HashMap::new();
 
         Self { font, font_cache }
@@ -35,7 +40,7 @@ impl Font {
     pub(crate) fn get_font_for_px(&mut self, px: u32) -> Rc<RefCell<FontForPx>> {
         self.font_cache
             .entry(px)
-            .or_insert_with(|| Rc::new(RefCell::new(FontForPx::new(px))))
+            .or_insert_with(|| Rc::new(RefCell::new(FontForPx::new(px, self.font.clone()))))
             .clone()
     }
 
@@ -65,7 +70,7 @@ impl Font {
         let mut cache = self
             .font_cache
             .entry(px)
-            .or_insert_with(|| Rc::new(RefCell::new(FontForPx::new(px))))
+            .or_insert_with(|| Rc::new(RefCell::new(FontForPx::new(px, self.font.clone()))))
             .borrow_mut();
 
         if missing_chars.len() > 0 {
@@ -77,7 +82,7 @@ impl Font {
         }
 
         for missing_char in missing_chars {
-            cache.create_character(missing_char, &self.font, wgpu_context, text_context);
+            cache.create_character(missing_char, wgpu_context, text_context);
         }
     }
 }
@@ -93,11 +98,13 @@ pub(crate) struct FontForPx {
     px: u32,
     texture: Option<Rc<Texture>>,
     packer: Packer,
+    font: Rc<fontdue::Font>,
     characters: HashMap<char, Character>,
+    horizontal_line_metrics: LineMetrics,
 }
 
 impl FontForPx {
-    fn new(px: u32) -> Self {
+    fn new(px: u32, font: Rc<fontdue::Font>) -> Self {
         let texture = None;
         let packer = Packer::new(rect_packer::Config {
             width: CACHE_WIDTH as i32,
@@ -106,12 +113,46 @@ impl FontForPx {
             rectangle_padding: 0,
         });
         let characters = HashMap::new();
+        let horizontal_line_metrics = font
+            .horizontal_line_metrics(px as f32)
+            .expect("We only handle horizontal fonts for now");
 
         Self {
             px,
             texture,
             packer,
+            font,
             characters,
+            horizontal_line_metrics,
+        }
+    }
+
+    fn get_or_create_texture(
+        &mut self,
+        wgpu_context: &WgpuContext,
+        text_context: &TextContext,
+    ) -> Rc<Texture> {
+        self.texture
+            .get_or_insert_with(|| {
+                Rc::new(FontForPx::font_texture(
+                    wgpu_context,
+                    &text_context.texture_bind_group_layout,
+                    &text_context.sampler,
+                ))
+            })
+            .clone()
+    }
+
+    fn get_or_create_character(
+        &mut self,
+        char: char,
+        wgpu_context: &WgpuContext,
+        text_context: &TextContext,
+    ) -> Option<&Character> {
+        if self.contains(&char) {
+            self.characters.get(&char)
+        } else {
+            self.create_character(char, wgpu_context, text_context)
         }
     }
 
@@ -122,31 +163,31 @@ impl FontForPx {
     fn create_character(
         &mut self,
         char: char,
-        font: &fontdue::Font,
         wgpu_context: &WgpuContext,
         text_context: &TextContext,
     ) -> Option<&Character> {
-        let texture = self.texture.get_or_insert_with(|| {
-            Rc::new(FontForPx::font_texture(
-                wgpu_context,
-                &text_context.texture_bind_group_layout,
-                &text_context.sampler,
-            ))
-        });
-
-        let (metrics, bitmap) = font.rasterize(char, self.px as f32);
+        let (metrics, bitmap) = self.font.rasterize(char, self.px as f32);
         let packed = self
             .packer
             .pack(metrics.width as i32, metrics.height as i32, false);
 
         println!(
-            "Creating char {}. Pack = {:?}, bitmap bytes {}",
+            "Creating char {}. Pack = {:?}, bitmap bytes {}, metrics {:?}",
             char,
             packed,
-            bitmap.len()
+            bitmap.len(),
+            metrics
         );
 
         if let Some(packed) = packed {
+            let texture = self.texture.get_or_insert_with(|| {
+                Rc::new(FontForPx::font_texture(
+                    wgpu_context,
+                    &text_context.texture_bind_group_layout,
+                    &text_context.sampler,
+                ))
+            });
+
             wgpu_context.queue.write_texture(
                 wgpu::ImageCopyTexture {
                     texture: &texture.texture,
@@ -177,7 +218,7 @@ impl FontForPx {
                 left: packed.left() as f32 / 1024.0,
                 top: packed.top() as f32 / 1024.0,
                 right: packed.right() as f32 / 1024.0,
-                bottom: packed.right() as f32 / 1024.0,
+                bottom: packed.bottom() as f32 / 1024.0,
             };
 
             let character = Character {
@@ -188,9 +229,10 @@ impl FontForPx {
             };
 
             self.characters.insert(char, character);
+            self.characters.get(&char)
+        } else {
+            None
         }
-
-        self.characters.get(&char)
     }
 
     fn font_texture(
@@ -375,9 +417,103 @@ impl TextRenderer {
     pub(crate) fn render<'a>(
         &'a self,
         render_pass: &mut RenderPass<'a>,
-        context: &'a WgpuContext,
+        wgpu_context: &'a WgpuContext,
+        text_context: &'a TextContext,
         camera: &'a Camera,
-        operation_block: &'a mut OperationBlock,
+        draw_text_operations: &'a mut DrawTextOperations,
     ) {
+        let char_count: usize = draw_text_operations
+            .operations
+            .iter()
+            .map(|operation| operation.text.len())
+            .sum();
+
+        if char_count == 0 {
+            return;
+        }
+
+        let mut vertices: Vec<TextureVertex> = Vec::with_capacity(char_count * 4);
+
+        let texture = draw_text_operations
+            .operations
+            .first()
+            .expect("We have at last one operation, or char_count would be 0")
+            .font_for_px
+            .borrow_mut()
+            .get_or_create_texture(wgpu_context, text_context);
+
+        for operation in draw_text_operations.operations.iter() {
+            let Position { mut left, top } = operation.position;
+            let mut font_for_px = operation.font_for_px.borrow_mut();
+            let ascent = font_for_px.horizontal_line_metrics.ascent;
+            for char in operation.text.chars() {
+                let character =
+                    match font_for_px.get_or_create_character(char, wgpu_context, text_context) {
+                        Some(character) => character,
+                        None => continue,
+                    };
+                left += character.metrics.bounds.xmin;
+                let char_top =
+                    top + ascent - character.metrics.bounds.height - character.metrics.bounds.ymin;
+                let bottom = char_top + character.rect.height as f32;
+                let right = left + character.rect.width as f32;
+
+                vertices.push(TextureVertex {
+                    position: [left, char_top],
+                    tex_coords: [character.tex_coords.left, character.tex_coords.top],
+                });
+                vertices.push(TextureVertex {
+                    position: [left, bottom],
+                    tex_coords: [character.tex_coords.left, character.tex_coords.bottom],
+                });
+                vertices.push(TextureVertex {
+                    position: [right, bottom],
+                    tex_coords: [character.tex_coords.right, character.tex_coords.bottom],
+                });
+                vertices.push(TextureVertex {
+                    position: [right, char_top],
+                    tex_coords: [character.tex_coords.right, character.tex_coords.top],
+                });
+
+                left += character.metrics.bounds.width;
+            }
+        }
+
+        let indices: Vec<u16> = (0..char_count)
+            .flat_map(|index| {
+                let step: u16 = index as u16 * 4;
+                [step + 0, step + 1, step + 2, step + 2, step + 3, step + 0]
+            })
+            .collect();
+
+        let vertex_buffer =
+            wgpu_context
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Vertex Buffer"),
+                    contents: bytemuck::cast_slice(&vertices[..]),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
+        let index_buffer =
+            wgpu_context
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Index Buffer"),
+                    contents: bytemuck::cast_slice(&indices[..]),
+                    usage: wgpu::BufferUsages::INDEX,
+                });
+
+        let (texture, vertex_buffer, index_buffer) =
+            draw_text_operations
+                .buffers
+                .insert((texture, vertex_buffer, index_buffer));
+
+        let indice_count = indices.len() as u32;
+        render_pass.set_pipeline(&self.render_pipeline);
+        render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);
+        render_pass.set_bind_group(1, &texture.texture_bind_group, &[]);
+        render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+        render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        render_pass.draw_indexed(0..indice_count, 0, 0..1);
     }
 }
