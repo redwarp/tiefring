@@ -3,12 +3,14 @@ use std::{cell::RefCell, collections::HashMap, fs, path::Path, rc::Rc};
 use fontdue::{LineMetrics, Metrics};
 
 use rect_packer::Packer;
-use wgpu::{util::DeviceExt, BindGroup, BindGroupLayout, RenderPass, RenderPipeline, Sampler};
+use wgpu::{
+    util::DeviceExt, BindGroup, BindGroupLayout, Color, RenderPass, RenderPipeline, Sampler,
+};
 
 use crate::{
     camera::Camera,
     sprite::Texture,
-    sprite::{TextureId, TextureVertex, TEXTURE_INDEX},
+    sprite::{TextureId, TEXTURE_INDEX},
     Canvas, DrawTextOperations, Position, Rect, WgpuContext,
 };
 
@@ -370,6 +372,50 @@ impl TextContext {
     }
 }
 
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct TextVertex {
+    position: [f32; 2],
+    tex_coords: [f32; 2],
+    color: [f32; 4],
+}
+
+impl TextVertex {
+    fn description<'a>() -> wgpu::VertexBufferLayout<'a> {
+        use std::mem;
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<TextVertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
+                    shader_location: 2,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+            ],
+        }
+    }
+}
+
+fn color_to_float_array(color: &Color) -> [f32; 4] {
+    [
+        color.r as f32,
+        color.g as f32,
+        color.b as f32,
+        color.a as f32,
+    ]
+}
+
 pub(crate) struct TextRenderer {
     render_pipeline: RenderPipeline,
 }
@@ -403,8 +449,8 @@ impl TextRenderer {
                     layout: Some(&render_pipeline_layout),
                     vertex: wgpu::VertexState {
                         module: &shader,
-                        entry_point: "vs_main",                   // 1.
-                        buffers: &[TextureVertex::description()], // 2.
+                        entry_point: "vs_main",
+                        buffers: &[TextVertex::description()],
                     },
                     fragment: Some(wgpu::FragmentState {
                         // 3.
@@ -418,9 +464,9 @@ impl TextRenderer {
                         }],
                     }),
                     primitive: wgpu::PrimitiveState {
-                        topology: wgpu::PrimitiveTopology::TriangleList, // 1.
+                        topology: wgpu::PrimitiveTopology::TriangleList,
                         strip_index_format: None,
-                        front_face: wgpu::FrontFace::Ccw, // 2.
+                        front_face: wgpu::FrontFace::Ccw,
                         cull_mode: Some(wgpu::Face::Back),
                         // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
                         polygon_mode: wgpu::PolygonMode::Fill,
@@ -458,7 +504,7 @@ impl TextRenderer {
             return;
         }
 
-        let mut vertices: Vec<TextureVertex> = Vec::with_capacity(char_count * 4);
+        let mut vertices: Vec<TextVertex> = Vec::with_capacity(char_count * 4);
 
         let texture = draw_text_operations
             .operations
@@ -491,29 +537,34 @@ impl TextRenderer {
                     top + ascent - character.metrics.height as f32 - character.metrics.ymin as f32;
                 let bottom = char_top + rect.height as f32;
                 let right = left + rect.width as f32;
+                let color = color_to_float_array(&operation.color);
 
-                vertices.push(TextureVertex {
+                vertices.push(TextVertex {
                     position: [left, char_top],
                     tex_coords: [character.tex_coords.left, character.tex_coords.top],
+                    color,
                 });
-                vertices.push(TextureVertex {
+                vertices.push(TextVertex {
                     position: [left, bottom],
                     tex_coords: [character.tex_coords.left, character.tex_coords.bottom],
+                    color,
                 });
-                vertices.push(TextureVertex {
+                vertices.push(TextVertex {
                     position: [right, bottom],
                     tex_coords: [character.tex_coords.right, character.tex_coords.bottom],
+                    color,
                 });
-                vertices.push(TextureVertex {
+                vertices.push(TextVertex {
                     position: [right, char_top],
                     tex_coords: [character.tex_coords.right, character.tex_coords.top],
+                    color,
                 });
 
                 left += character.metrics.width as f32;
             }
         }
 
-        let indices: Vec<u16> = (0..vertices.len())
+        let indices: Vec<u16> = (0..vertices.len() / 4)
             .flat_map(|index| {
                 let step: u16 = index as u16 * 4;
                 [step + 0, step + 1, step + 2, step + 2, step + 3, step + 0]

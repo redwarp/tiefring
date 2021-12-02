@@ -161,7 +161,19 @@ fn main() {
                             b: 0.0,
                             a: 1.0,
                         },
-                    )
+                    );
+                    graphics.draw_text(
+                        &mut roboto_regular,
+                        "And even more text!",
+                        32,
+                        Position::new(50.0, 200.0),
+                        Color {
+                            r: 0.0,
+                            g: 0.0,
+                            b: 0.0,
+                            a: 0.5,
+                        },
+                    );
                 })
                 .unwrap();
         }

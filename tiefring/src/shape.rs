@@ -30,7 +30,7 @@ impl ColorVertex {
     }
 }
 
-fn color_to_float_array(color: Color) -> [f32; 4] {
+fn color_to_float_array(color: &Color) -> [f32; 4] {
     [
         color.r as f32,
         color.g as f32,
@@ -117,7 +117,7 @@ impl ColorRenderer {
             .draw_rect_operations
             .iter()
             .flat_map(|&DrawRectOperation(rect, color)| {
-                let color: [f32; 4] = color_to_float_array(color);
+                let color: [f32; 4] = color_to_float_array(&color);
                 [
                     ColorVertex {
                         position: [rect.left as f32, rect.top as f32],
