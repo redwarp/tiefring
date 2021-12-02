@@ -1,10 +1,10 @@
-use std::{cell::RefCell, path::Path, rc::Rc};
+use std::{cell::RefCell, hash::Hash, path::Path, rc::Rc};
 
 use camera::Camera;
 use raw_window_handle::HasRawWindowHandle;
 use shape::ColorRenderer;
 use sprite::{Sprite, Texture, TextureId, TextureRenderer};
-use text::{Font, FontForPx, TextContext, TextRenderer};
+use text::{Font, FontForPx, FontId, TextContext, TextRenderer};
 use thiserror::Error;
 
 pub use wgpu::Color;
@@ -365,7 +365,7 @@ impl Graphics {
     ) {
         let text: String = text.into();
         let font_for_px = font.get_font_for_px(px);
-        self.get_operation_block(OperationType::DrawText(TextureId(0)))
+        self.get_operation_block(OperationType::DrawText(FontId(font.font.file_hash(), px)))
             .push_draw_text_operation(DrawTextOperation {
                 font_for_px,
                 position,
@@ -404,7 +404,7 @@ impl Graphics {
 enum OperationType {
     DrawRect,
     DrawTexture(TextureId),
-    DrawText(TextureId),
+    DrawText(FontId),
 }
 
 pub(crate) struct DrawRectOperation(Rect, Color);

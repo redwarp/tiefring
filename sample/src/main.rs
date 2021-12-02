@@ -57,8 +57,11 @@ fn main() {
     let tile_set =
         TileSet::load_image(&mut canvas, sprites.join("basictiles.png"), (16, 16)).unwrap();
 
-    let mut font = Font::load_font();
-    // font.test(&canvas, 20, "Hello!");
+    let fonts = find_folder::Search::ParentsThenKids(3, 3)
+        .for_folder("sample/fonts")
+        .unwrap();
+
+    let mut roboto_regular = Font::load_font(fonts.join("Roboto-Regular.ttf")).unwrap();
 
     window.set_visible(true);
 
@@ -148,9 +151,9 @@ fn main() {
                     );
 
                     graphics.draw_text(
-                        &mut font,
-                        "Help",
-                        40,
+                        &mut roboto_regular,
+                        "Wehp this is some text it seems!",
+                        32,
                         Position::new(0.0, 0.0),
                         Color {
                             r: 1.0,

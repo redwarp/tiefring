@@ -1,8 +1,4 @@
-use std::{
-    cell::RefCell,
-    collections::{hash_map::Entry, HashMap},
-    rc::Rc,
-};
+use std::{cell::RefCell, collections::HashMap, fs, path::Path, rc::Rc};
 
 use fontdue::{LineMetrics, Metrics};
 
@@ -13,24 +9,28 @@ use crate::{
     camera::Camera,
     sprite::Texture,
     sprite::{TextureId, TextureVertex, TEXTURE_INDEX},
-    Canvas, DrawTextOperations, OperationBlock, Position, Rect, WgpuContext,
+    Canvas, DrawTextOperations, Position, Rect, WgpuContext,
 };
 
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
+pub(crate) struct FontId(pub(crate) usize, pub(crate) u32);
+
 pub struct Font {
-    font: Rc<fontdue::Font>,
+    pub(crate) font: Rc<fontdue::Font>,
     font_cache: HashMap<u32, Rc<RefCell<FontForPx>>>,
 }
 
 static CACHE_WIDTH: u32 = 1024;
 
 impl Font {
-    pub fn load_font() -> Self {
-        let font = include_bytes!("../../sample/fonts/Roboto-Regular.ttf") as &[u8];
+    pub fn load_font<P: AsRef<Path>>(path: P) -> Option<Self> {
+        let bytes = fs::read(path).ok()?;
+
         let font =
-            Rc::new(fontdue::Font::from_bytes(font, fontdue::FontSettings::default()).unwrap());
+            Rc::new(fontdue::Font::from_bytes(bytes, fontdue::FontSettings::default()).ok()?);
         let font_cache = HashMap::new();
 
-        Self { font, font_cache }
+        Some(Self { font, font_cache })
     }
 
     pub fn test<S: Into<String>>(&mut self, canvas: &Canvas, px: u32, text: S) {
@@ -91,7 +91,7 @@ struct Character {
     metrics: Metrics,
     tex_coords: Rect,
     character: char,
-    rect: rect_packer::Rect,
+    rect: Option<rect_packer::Rect>,
 }
 
 pub(crate) struct FontForPx {
@@ -167,12 +167,38 @@ impl FontForPx {
         text_context: &TextContext,
     ) -> Option<&Character> {
         let (metrics, bitmap) = self.font.rasterize(char, self.px as f32);
+
+        if metrics.width == 0 || metrics.height == 0 {
+            // A character without dimension, probably white space.
+            println!(
+                "Creating char '{}'. bitmap bytes {}, metrics {:?}",
+                char,
+                bitmap.len(),
+                metrics
+            );
+
+            let character = Character {
+                metrics,
+                tex_coords: Rect {
+                    left: 0.0,
+                    top: 0.0,
+                    right: 0.0,
+                    bottom: 0.0,
+                },
+                character: char,
+                rect: None,
+            };
+
+            self.characters.insert(char, character);
+            return self.characters.get(&char);
+        }
+
         let packed = self
             .packer
             .pack(metrics.width as i32, metrics.height as i32, false);
 
         println!(
-            "Creating char {}. Pack = {:?}, bitmap bytes {}, metrics {:?}",
+            "Creating char '{}'. Pack = {:?}, bitmap bytes {}, metrics {:?}",
             char,
             packed,
             bitmap.len(),
@@ -225,7 +251,7 @@ impl FontForPx {
                 metrics,
                 tex_coords,
                 character: char,
-                rect: packed,
+                rect: Some(packed),
             };
 
             self.characters.insert(char, character);
@@ -452,11 +478,19 @@ impl TextRenderer {
                         Some(character) => character,
                         None => continue,
                     };
-                left += character.metrics.bounds.xmin;
+
+                left += character.metrics.xmin as f32;
+                let rect = if let Some(rect) = character.rect {
+                    rect
+                } else {
+                    left += character.metrics.advance_width.round();
+                    continue;
+                };
+
                 let char_top =
-                    top + ascent - character.metrics.bounds.height - character.metrics.bounds.ymin;
-                let bottom = char_top + character.rect.height as f32;
-                let right = left + character.rect.width as f32;
+                    top + ascent - character.metrics.height as f32 - character.metrics.ymin as f32;
+                let bottom = char_top + rect.height as f32;
+                let right = left + rect.width as f32;
 
                 vertices.push(TextureVertex {
                     position: [left, char_top],
@@ -475,11 +509,11 @@ impl TextRenderer {
                     tex_coords: [character.tex_coords.right, character.tex_coords.top],
                 });
 
-                left += character.metrics.bounds.width;
+                left += character.metrics.width as f32;
             }
         }
 
-        let indices: Vec<u16> = (0..char_count)
+        let indices: Vec<u16> = (0..vertices.len())
             .flat_map(|index| {
                 let step: u16 = index as u16 * 4;
                 [step + 0, step + 1, step + 2, step + 2, step + 3, step + 0]
