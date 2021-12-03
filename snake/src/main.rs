@@ -1,6 +1,7 @@
 use std::{
     cell::RefCell,
     collections::VecDeque,
+    ops::Add,
     rc::Rc,
     time::{Duration, Instant},
 };
@@ -207,16 +208,22 @@ impl Snake {
             })
             .collect();
 
-        graphics.draw_rect(
-            squares
-                .pop_front()
-                .expect("A snake should have a head")
-                .clone(),
-            RED,
-        );
+        // graphics.draw_rect(
+        //     squares
+        //         .pop_front()
+        //         .expect("A snake should have a head")
+        //         .clone(),
+        //     RED,
+        // );
 
-        for rect in squares.into_iter() {
-            graphics.draw_rect(rect, ORANGE)
+        // for rect in squares.into_iter() {
+        //     graphics.draw_rect(rect, ORANGE)
+        // }
+
+        let count = (squares.len() - 1) as f64;
+        for (index, rect) in squares.into_iter().enumerate() {
+            let percent = index as f64 / count;
+            graphics.draw_rect(rect, RED.interpolate(&ORANGE, percent));
         }
     }
 }
@@ -714,4 +721,23 @@ fn main() {
             window.request_redraw();
         }
     });
+}
+
+trait Interpolator<Rhs = Self> {
+    type Output;
+
+    fn interpolate(&self, other: &Rhs, percent: f64) -> Self::Output;
+}
+
+impl Interpolator for Color {
+    type Output = Color;
+
+    fn interpolate(&self, other: &Self, percent: f64) -> Self::Output {
+        Color {
+            r: self.a * (1.0 - percent) + other.r * percent,
+            g: self.g * (1.0 - percent) + other.g * percent,
+            b: self.b * (1.0 - percent) + other.b * percent,
+            a: self.a * (1.0 - percent) + other.a * percent,
+        }
+    }
 }
