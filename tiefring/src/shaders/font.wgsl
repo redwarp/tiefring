@@ -41,6 +41,4 @@ var s_diffuse: sampler;
 fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     var r = textureSample(t_diffuse, s_diffuse, in.tex_coords).r;
     return vec4<f32>(in.color.rgb, in.color.a * r);
-    // return vec4<f32>(0.0,0.0,0.0, 1.0 * r);
-    // return vec4<f32>(in.color);
 }

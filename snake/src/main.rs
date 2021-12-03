@@ -1,4 +1,5 @@
 use std::{
+    cell::RefCell,
     collections::VecDeque,
     rc::Rc,
     time::{Duration, Instant},
@@ -7,6 +8,7 @@ use std::{
 use rand::Rng;
 use tiefring::{
     sprite::{Sprite, TileSet},
+    text::Font,
     Canvas, CanvasSettings, Color, Graphics, Rect, Size,
 };
 use winit::{
@@ -66,7 +68,7 @@ struct Food {
 }
 
 impl Food {
-    fn generate_food(width: u8, height: u8, snake: &Snake) -> Self {
+    fn generate_food(width: usize, height: usize, snake: &Snake) -> Self {
         let mut index =
             rand::thread_rng().gen_range(0..width as i32 * height as i32 - snake.body.len() as i32);
         let body_indices: Vec<i32> = snake
@@ -109,6 +111,7 @@ impl Food {
     }
 }
 
+#[derive(Clone)]
 struct Snake {
     body: VecDeque<Segment>,
     direction: Direction,
@@ -137,7 +140,7 @@ impl Snake {
             .any(|ring| head.position == ring.position)
     }
 
-    fn is_out_of_bounds(&self, bounds: (u8, u8)) -> bool {
+    fn is_out_of_bounds(&self, bounds: (usize, usize)) -> bool {
         let width = bounds.0 as i32;
         let height = bounds.1 as i32;
         let &Position { x, y } = &self.head().position;
@@ -218,7 +221,7 @@ impl Snake {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 struct Segment {
     position: Position,
 }
@@ -237,12 +240,14 @@ impl Segment {
     }
 }
 
+#[derive(Clone)]
 struct Terrain {
+    size: (usize, usize),
     tiles: Vec<usize>,
 }
 
 impl Terrain {
-    fn new((width, height): (u8, u8), grass: &TileSet) -> Self {
+    fn new((width, height): (usize, usize), grass: &TileSet) -> Self {
         let (tile_count, _) = grass.tile_count();
         let tile_count = tile_count as usize;
         let mut rng = rand::thread_rng();
@@ -253,25 +258,55 @@ impl Terrain {
             .map(|_| rng.gen_range(0..tile_count))
             .collect();
 
-        Self { tiles }
+        Self {
+            size: (width, height),
+            tiles,
+        }
+    }
+
+    fn render(&self, graphics: &mut Graphics, sprites: &Sprites) {
+        let (tile_count, _) = sprites.grass.tile_count();
+        let grasses: Vec<_> = (0..tile_count)
+            .map(|index| sprites.grass.sprite(index, 0))
+            .collect();
+        for i in 0..self.size.0 {
+            for j in 0..self.size.1 {
+                let sprite_index = i as usize + j as usize * self.size.0 as usize;
+                graphics.draw_sprite(
+                    unsafe { grasses.get_unchecked(*self.tiles.get_unchecked(sprite_index)) },
+                    tiefring::Position {
+                        top: j as f32 * GRID_STEP,
+                        left: i as f32 * GRID_STEP,
+                    },
+                )
+            }
+        }
     }
 }
 
 enum State {
     Playing,
-    Losing,
+    Losing {
+        score: u32,
+        snake: Snake,
+        terrain: Terrain,
+    },
     Starting,
 }
 
 struct Sprites {
     start: Sprite,
     grass: TileSet,
+    font: Font,
 }
 
 impl Sprites {
     fn new(canvas: &mut Canvas) -> Self {
         let sprites = find_folder::Search::ParentsThenKids(3, 3)
             .for_folder("snake/sprites")
+            .unwrap();
+        let fonts = find_folder::Search::ParentsThenKids(3, 3)
+            .for_folder("snake/fonts")
             .unwrap();
         Self {
             start: Sprite::load_image(canvas, sprites.join("start.png")).unwrap(),
@@ -281,22 +316,23 @@ impl Sprites {
                 Size::new(GRID_STEP as u32, GRID_STEP as u32),
             )
             .unwrap(),
+            font: Font::load_font(fonts.join("VT323-Regular.ttf")).unwrap(),
         }
     }
 }
 
 trait Scene {
-    fn render(&self, graphics: &mut Graphics);
+    fn render(&mut self, graphics: &mut Graphics);
     fn update(&mut self, dt: Duration, input: Option<Input>) -> Option<State>;
 }
 
 struct StartingScene {
     size: (u8, u8),
-    sprites: Rc<Sprites>,
+    sprites: Rc<RefCell<Sprites>>,
 }
 
 impl StartingScene {
-    fn new((width, height): (u8, u8), sprites: Rc<Sprites>) -> Self {
+    fn new((width, height): (u8, u8), sprites: Rc<RefCell<Sprites>>) -> Self {
         Self {
             size: (width, height),
             sprites,
@@ -305,14 +341,16 @@ impl StartingScene {
 }
 
 impl Scene for StartingScene {
-    fn render(&self, graphics: &mut Graphics) {
+    fn render(&mut self, graphics: &mut Graphics) {
         let position = tiefring::Position {
-            left: (self.size.0 as f32 * GRID_STEP - self.sprites.start.dimensions.width as f32)
+            left: (self.size.0 as f32 * GRID_STEP
+                - self.sprites.borrow().start.dimensions.width as f32)
                 / 2.0,
-            top: (self.size.1 as f32 * GRID_STEP - self.sprites.start.dimensions.height as f32)
+            top: (self.size.1 as f32 * GRID_STEP
+                - self.sprites.borrow().start.dimensions.height as f32)
                 / 2.0,
         };
-        graphics.draw_sprite(&self.sprites.start, position);
+        graphics.draw_sprite(&self.sprites.borrow().start, position);
     }
 
     fn update(&mut self, _dt: Duration, input: Option<Input>) -> Option<State> {
@@ -325,23 +363,25 @@ impl Scene for StartingScene {
 }
 
 struct PlayingScene {
-    size: (u8, u8),
+    size: (usize, usize),
     snake: Snake,
     food: Food,
     dt: Duration,
     score: u32,
     pending_input: Option<Input>,
-    sprites: Rc<Sprites>,
+    sprites: Rc<RefCell<Sprites>>,
     terrain: Terrain,
 }
 
 impl PlayingScene {
-    fn new((width, height): (u8, u8), sprites: Rc<Sprites>) -> Self {
+    fn new((width, height): (u8, u8), sprites: Rc<RefCell<Sprites>>) -> Self {
+        let width = width as usize;
+        let height = height as usize;
         let snake = Snake::new(width as i32 / 2, height as i32 / 2);
         let food = Food::generate_food(width, height, &snake);
         let dt = Duration::new(0, 0);
         let score = 0;
-        let terrain = Terrain::new((width, height), &sprites.grass);
+        let terrain = Terrain::new((width, height), &sprites.borrow().grass);
 
         Self {
             size: (width, height),
@@ -382,28 +422,23 @@ impl PlayingScene {
 }
 
 impl Scene for PlayingScene {
-    fn render(&self, graphics: &mut Graphics) {
-        let (tile_count, _) = self.sprites.grass.tile_count();
-        let grasses: Vec<_> = (0..tile_count)
-            .map(|index| self.sprites.grass.sprite(index, 0))
-            .collect();
-        for i in 0..self.size.0 {
-            for j in 0..self.size.1 {
-                let sprite_index = i as usize + j as usize * self.size.0 as usize;
-                graphics.draw_sprite(
-                    unsafe {
-                        grasses.get_unchecked(*self.terrain.tiles.get_unchecked(sprite_index))
-                    },
-                    tiefring::Position {
-                        top: j as f32 * GRID_STEP,
-                        left: i as f32 * GRID_STEP,
-                    },
-                )
-            }
-        }
+    fn render(&mut self, graphics: &mut Graphics) {
+        self.terrain.render(graphics, &*self.sprites.borrow());
 
         self.snake.render(graphics);
         self.food.render(graphics);
+        graphics.draw_text(
+            &mut self.sprites.borrow_mut().font,
+            format!("Score: {}", self.score),
+            32,
+            tiefring::Position::new(10.0, 0.0),
+            Color {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 0.7,
+            },
+        );
     }
 
     fn update(&mut self, dt: Duration, input: Option<Input>) -> Option<State> {
@@ -431,7 +466,100 @@ impl Scene for PlayingScene {
         }
 
         if self.is_loosing() {
-            Some(State::Starting)
+            Some(State::Losing {
+                score: self.score,
+                snake: self.snake.clone(),
+                terrain: self.terrain.clone(),
+            })
+        } else {
+            None
+        }
+    }
+}
+
+struct LosingScene {
+    snake: Snake,
+    score: u32,
+    terrain: Terrain,
+    sprites: Rc<RefCell<Sprites>>,
+}
+
+impl LosingScene {
+    fn new(snake: Snake, score: u32, terrain: Terrain, sprites: Rc<RefCell<Sprites>>) -> Self {
+        Self {
+            snake,
+            score,
+            terrain,
+            sprites,
+        }
+    }
+}
+
+impl Scene for LosingScene {
+    fn render(&mut self, graphics: &mut Graphics) {
+        self.terrain.render(graphics, &*self.sprites.borrow());
+        self.snake.render(graphics);
+        graphics.draw_rect(
+            Rect {
+                left: 0.0,
+                top: 0.0,
+                right: self.terrain.size.0 as f32 * GRID_STEP,
+                bottom: self.terrain.size.1 as f32 * GRID_STEP,
+            },
+            Color {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 0.2,
+            },
+        );
+
+        let position = tiefring::Position {
+            left: (self.terrain.size.0 / 3) as f32 * GRID_STEP,
+            top: (self.terrain.size.1 / 3) as f32 * GRID_STEP,
+        };
+        graphics.draw_text(
+            &mut self.sprites.borrow_mut().font,
+            "You lose!",
+            80,
+            position,
+            Color {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            },
+        );
+        graphics.draw_text(
+            &mut self.sprites.borrow_mut().font,
+            format!("You scored {} points", self.score),
+            40,
+            position.translated(0.0, 80.0),
+            Color {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            },
+        );
+        graphics.draw_text(
+            &mut self.sprites.borrow_mut().font,
+            "Press space to play again.",
+            40,
+            position.translated(0.0, 120.0),
+            Color {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            },
+        );
+    }
+
+    fn update(&mut self, _dt: Duration, input: Option<Input>) -> Option<State> {
+        // Only need to check if space was pressed.
+        if let Some(Input::Space) = input {
+            Some(State::Playing)
         } else {
             None
         }
@@ -441,12 +569,12 @@ impl Scene for PlayingScene {
 struct Game {
     size: (u8, u8),
     scene: Box<dyn Scene>,
-    sprites: Rc<Sprites>,
+    sprites: Rc<RefCell<Sprites>>,
 }
 
 impl Game {
     fn new((width, height): (u8, u8), canvas: &mut Canvas) -> Self {
-        let sprites = Rc::new(Sprites::new(canvas));
+        let sprites = Rc::new(RefCell::new(Sprites::new(canvas)));
 
         let scene = Box::new(StartingScene::new((width, height), sprites.clone()));
 
@@ -457,7 +585,7 @@ impl Game {
         }
     }
 
-    fn render(&self, graphics: &mut Graphics) {
+    fn render(&mut self, graphics: &mut Graphics) {
         self.scene.render(graphics);
     }
 
@@ -470,7 +598,19 @@ impl Game {
             Some(State::Playing) => {
                 self.scene = Box::new(PlayingScene::new(self.size, self.sprites.clone()));
             }
-            _ => {}
+            Some(State::Losing {
+                snake,
+                score,
+                terrain,
+            }) => {
+                self.scene = Box::new(LosingScene::new(
+                    snake,
+                    score,
+                    terrain,
+                    self.sprites.clone(),
+                ))
+            }
+            None => {}
         };
 
         true

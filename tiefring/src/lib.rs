@@ -1,4 +1,4 @@
-use std::{cell::RefCell, hash::Hash, path::Path, rc::Rc};
+use std::{cell::RefCell, path::Path, rc::Rc};
 
 use camera::Camera;
 use raw_window_handle::HasRawWindowHandle;
@@ -502,6 +502,7 @@ impl std::ops::Mul<f32> for &Rect {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct Position {
     pub left: f32,
     pub top: f32,
@@ -510,6 +511,13 @@ pub struct Position {
 impl Position {
     pub fn new(left: f32, top: f32) -> Self {
         Self { left, top }
+    }
+
+    pub fn translated(&self, x: f32, y: f32) -> Self {
+        Self {
+            left: self.left + x,
+            top: self.top + y,
+        }
     }
 }
 
