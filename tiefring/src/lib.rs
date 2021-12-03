@@ -422,7 +422,7 @@ pub(crate) struct DrawTextOperation {
     pub color: Color,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Rect {
     pub left: f32,
     pub top: f32,

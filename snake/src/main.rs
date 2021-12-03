@@ -32,7 +32,7 @@ pub enum Input {
     Space,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Direction {
     Up,
     Right,
@@ -40,7 +40,7 @@ pub enum Direction {
     Left,
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Debug)]
 struct Position {
     x: i32,
     y: i32,
@@ -111,7 +111,7 @@ impl Food {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Snake {
     body: VecDeque<Segment>,
     direction: Direction,
@@ -221,7 +221,7 @@ impl Snake {
     }
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Debug)]
 struct Segment {
     position: Position,
 }
@@ -329,28 +329,43 @@ trait Scene {
 struct StartingScene {
     size: (u8, u8),
     sprites: Rc<RefCell<Sprites>>,
+    terrain: Terrain,
 }
 
 impl StartingScene {
     fn new((width, height): (u8, u8), sprites: Rc<RefCell<Sprites>>) -> Self {
+        let terrain = Terrain::new((width as usize, height as usize), &sprites.borrow().grass);
         Self {
             size: (width, height),
             sprites,
+            terrain: terrain,
         }
     }
 }
 
 impl Scene for StartingScene {
     fn render(&mut self, graphics: &mut Graphics) {
+        let sprite_height = self.sprites.borrow().start.dimensions.height as f32;
+        self.terrain.render(graphics, &self.sprites.borrow());
         let position = tiefring::Position {
             left: (self.size.0 as f32 * GRID_STEP
                 - self.sprites.borrow().start.dimensions.width as f32)
                 / 2.0,
-            top: (self.size.1 as f32 * GRID_STEP
-                - self.sprites.borrow().start.dimensions.height as f32)
-                / 2.0,
+            top: (self.size.1 as f32 * GRID_STEP - sprite_height) / 2.0,
         };
         graphics.draw_sprite(&self.sprites.borrow().start, position);
+        graphics.draw_text(
+            &mut self.sprites.borrow_mut().font,
+            "Press space to start",
+            40,
+            position.translated(0.0, sprite_height),
+            Color {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            },
+        )
     }
 
     fn update(&mut self, _dt: Duration, input: Option<Input>) -> Option<State> {
@@ -442,7 +457,7 @@ impl Scene for PlayingScene {
     }
 
     fn update(&mut self, dt: Duration, input: Option<Input>) -> Option<State> {
-        let step = Duration::new(0, 250_000_000);
+        let step = Duration::new(0, 200_000_000);
         if input.is_some() {
             self.pending_input = input;
         }

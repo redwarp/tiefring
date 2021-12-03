@@ -75,14 +75,6 @@ impl Font {
             .or_insert_with(|| Rc::new(RefCell::new(FontForPx::new(px, self.font.clone()))))
             .borrow_mut();
 
-        if missing_chars.len() > 0 {
-            println!(
-                "We are missing {} chars: {:?}",
-                missing_chars.len(),
-                missing_chars
-            );
-        }
-
         for missing_char in missing_chars {
             cache.create_character(missing_char, wgpu_context, text_context);
         }
@@ -172,12 +164,6 @@ impl FontForPx {
 
         if metrics.width == 0 || metrics.height == 0 {
             // A character without dimension, probably white space.
-            println!(
-                "Creating char '{}'. bitmap bytes {}, metrics {:?}",
-                char,
-                bitmap.len(),
-                metrics
-            );
 
             let character = Character {
                 metrics,
@@ -198,14 +184,6 @@ impl FontForPx {
         let packed = self
             .packer
             .pack(metrics.width as i32, metrics.height as i32, false);
-
-        println!(
-            "Creating char '{}'. Pack = {:?}, bitmap bytes {}, metrics {:?}",
-            char,
-            packed,
-            bitmap.len(),
-            metrics
-        );
 
         if let Some(packed) = packed {
             let texture = self.texture.get_or_insert_with(|| {
