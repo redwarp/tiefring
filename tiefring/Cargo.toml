@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 bytemuck = { version = "1.7", features = ["derive"] }
-raw-window-handle = "0.3"
+raw-window-handle = "0.4"
 wgpu = "0.11"
 thiserror = "1.0"
 pixels = "0.8"
