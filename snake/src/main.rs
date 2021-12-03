@@ -708,6 +708,10 @@ fn main() {
                 None
             };
 
+            if input.key_pressed(VirtualKeyCode::P) {
+                pollster::block_on(canvas.screenshot("snake.png")).unwrap();
+            }
+
             if let Some(size) = input.window_resized() {
                 canvas.resize(size.width, size.height);
             }

@@ -1,6 +1,7 @@
 # Snake
 
 ![Snake](snake.png)
+![You lose](end.png)
 
 ## Resources
 
