@@ -1,7 +1,6 @@
 use std::{
     cell::RefCell,
     collections::VecDeque,
-    ops::Add,
     rc::Rc,
     time::{Duration, Instant},
 };
@@ -193,7 +192,7 @@ impl Snake {
 
         let count = self.body.len();
         let step = 0.1 / count as f32;
-        let mut squares: VecDeque<Rect> = self
+        let squares: VecDeque<Rect> = self
             .body
             .iter()
             .enumerate()
@@ -207,18 +206,6 @@ impl Snake {
                 )
             })
             .collect();
-
-        // graphics.draw_rect(
-        //     squares
-        //         .pop_front()
-        //         .expect("A snake should have a head")
-        //         .clone(),
-        //     RED,
-        // );
-
-        // for rect in squares.into_iter() {
-        //     graphics.draw_rect(rect, ORANGE)
-        // }
 
         let count = (squares.len() - 1) as f64;
         for (index, rect) in squares.into_iter().enumerate() {
@@ -298,6 +285,7 @@ enum State {
         snake: Snake,
         terrain: Terrain,
     },
+    #[allow(dead_code)]
     Starting,
 }
 
@@ -613,29 +601,29 @@ impl Game {
 
     fn update(&mut self, dt: Duration, input: Option<Input>) -> bool {
         let result = self.scene.update(dt, input);
-        match result {
-            Some(State::Starting) => {
-                self.scene = Box::new(StartingScene::new(self.size, self.sprites.clone()));
-            }
-            Some(State::Playing) => {
-                self.scene = Box::new(PlayingScene::new(self.size, self.sprites.clone()));
-            }
-            Some(State::Losing {
+        if let Some(state) = result {
+            self.scene = self.build_scene(state);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn build_scene(&self, state: State) -> Box<dyn Scene> {
+        match state {
+            State::Starting => Box::new(StartingScene::new(self.size, self.sprites.clone())),
+            State::Playing => Box::new(PlayingScene::new(self.size, self.sprites.clone())),
+            State::Losing {
                 snake,
                 score,
                 terrain,
-            }) => {
-                self.scene = Box::new(LosingScene::new(
-                    snake,
-                    score,
-                    terrain,
-                    self.sprites.clone(),
-                ))
-            }
-            None => {}
-        };
-
-        true
+            } => Box::new(LosingScene::new(
+                snake,
+                score,
+                terrain,
+                self.sprites.clone(),
+            )),
+        }
     }
 }
 

@@ -1,6 +1,6 @@
 use wgpu::{util::DeviceExt, Color, RenderPass, RenderPipeline};
 
-use crate::{camera::Camera, DrawRectOperation, OperationBlock, WgpuContext};
+use crate::{camera::Camera, DrawRectOperation, DrawRectOperations, WgpuContext};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -111,10 +111,10 @@ impl ColorRenderer {
         render_pass: &mut RenderPass<'a>,
         context: &WgpuContext,
         camera: &'a Camera,
-        operation_block: &'a mut OperationBlock,
+        draw_rect_operations: &'a mut DrawRectOperations,
     ) {
-        let vertices: Vec<_> = operation_block
-            .draw_rect_operations
+        let vertices: Vec<_> = draw_rect_operations
+            .operations
             .iter()
             .flat_map(|&DrawRectOperation(rect, color)| {
                 let color: [f32; 4] = color_to_float_array(&color);
@@ -139,7 +139,7 @@ impl ColorRenderer {
             })
             .collect();
 
-        let indices: Vec<u16> = (0..operation_block.draw_rect_operations.len())
+        let indices: Vec<u16> = (0..draw_rect_operations.operations.len())
             .flat_map(|index| {
                 let step: u16 = index as u16 * 4;
                 [step + 0, step + 1, step + 2, step + 2, step + 3, step + 0]
@@ -161,15 +161,15 @@ impl ColorRenderer {
                 usage: wgpu::BufferUsages::INDEX,
             });
 
-        operation_block.draw_rect_buffers = Some((vertex_buffer, index_buffer));
+        let (vertex_buffer, index_buffer) = draw_rect_operations
+            .buffers
+            .insert((vertex_buffer, index_buffer));
 
-        if let Some((vertex_buffer, index_buffer)) = &operation_block.draw_rect_buffers {
-            let count = indices.len() as u32;
-            render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-            render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..count, 0, 0..1);
-        }
+        let count = indices.len() as u32;
+        render_pass.set_pipeline(&self.render_pipeline);
+        render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);
+        render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+        render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        render_pass.draw_indexed(0..count, 0, 0..1);
     }
 }

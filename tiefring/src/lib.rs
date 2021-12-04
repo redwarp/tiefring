@@ -223,13 +223,13 @@ impl Canvas {
                     render_pass,
                     &self.wgpu_context,
                     &self.camera,
-                    operation_block,
+                    &mut operation_block.draw_rect_operations,
                 ),
                 OperationType::DrawTexture(_) => self.texture_renderer.render(
                     render_pass,
                     &self.wgpu_context,
                     &self.camera,
-                    operation_block,
+                    &mut operation_block.draw_texture_operations,
                 ),
                 OperationType::DrawText(_) => self.text_renderer.render(
                     render_pass,
@@ -268,18 +268,14 @@ pub enum CanvasZero {
 }
 
 pub struct Graphics {
-    draw_rect_operations: Vec<DrawRectOperation>,
-    draw_texture_operations: Vec<DrawTextureOperation>,
     current_operation_block: Option<OperationBlock>,
     operation_blocks: Vec<OperationBlock>,
 }
 
 struct OperationBlock {
     operation_type: OperationType,
-    draw_rect_operations: Vec<DrawRectOperation>,
-    draw_texture_operations: Vec<DrawTextureOperation>,
-    draw_rect_buffers: Option<(Buffer, Buffer)>,
-    draw_texture_buffers: Vec<(Buffer, Rc<Texture>, Vec<u16>, Buffer)>,
+    draw_rect_operations: DrawRectOperations,
+    draw_texture_operations: DrawTextureOperations,
     draw_text_operations: DrawTextOperations,
 }
 
@@ -287,10 +283,8 @@ impl OperationBlock {
     fn new(operation_type: OperationType) -> Self {
         OperationBlock {
             operation_type,
-            draw_rect_operations: Vec::new(),
-            draw_texture_operations: Vec::new(),
-            draw_rect_buffers: None,
-            draw_texture_buffers: Vec::new(),
+            draw_rect_operations: DrawRectOperations::new(),
+            draw_texture_operations: DrawTextureOperations::new(),
             draw_text_operations: DrawTextOperations::new(),
         }
     }
@@ -299,6 +293,18 @@ impl OperationBlock {
         self.draw_text_operations
             .operations
             .push(draw_text_operation);
+    }
+
+    fn push_draw_rect_operation(&mut self, draw_rect_operation: DrawRectOperation) {
+        self.draw_rect_operations
+            .operations
+            .push(draw_rect_operation);
+    }
+
+    fn push_draw_texture_operation(&mut self, draw_texture_operation: DrawTextureOperation) {
+        self.draw_texture_operations
+            .operations
+            .push(draw_texture_operation);
     }
 }
 
@@ -316,11 +322,23 @@ impl DrawTextOperations {
     }
 }
 
+struct DrawTextureOperations {
+    operations: Vec<DrawTextureOperation>,
+    buffers: Option<(Rc<Texture>, Buffer, Buffer, Vec<u16>)>,
+}
+
+impl DrawTextureOperations {
+    fn new() -> Self {
+        Self {
+            operations: Vec::new(),
+            buffers: None,
+        }
+    }
+}
+
 impl Graphics {
     fn new() -> Self {
         Graphics {
-            draw_rect_operations: vec![],
-            draw_texture_operations: vec![],
             current_operation_block: None,
             operation_blocks: Vec::new(),
         }
@@ -328,8 +346,7 @@ impl Graphics {
 
     pub fn draw_rect<R: Into<Rect>>(&mut self, rect: R, color: Color) {
         self.get_operation_block(OperationType::DrawRect)
-            .draw_rect_operations
-            .push(DrawRectOperation(rect.into(), color));
+            .push_draw_rect_operation(DrawRectOperation(rect.into(), color));
     }
 
     pub fn draw_sprite(&mut self, sprite: &Sprite, position: Position) {
@@ -347,8 +364,7 @@ impl Graphics {
         let destination = rect.into();
         let texture = sprite.texture.clone();
         self.get_operation_block(OperationType::DrawTexture(sprite.texture.id))
-            .draw_texture_operations
-            .push(DrawTextureOperation {
+            .push_draw_texture_operation(DrawTextureOperation {
                 tex_coords,
                 destination,
                 texture,
@@ -375,8 +391,6 @@ impl Graphics {
     }
 
     fn reset(&mut self) {
-        self.draw_rect_operations.clear();
-        self.draw_texture_operations.clear();
         self.current_operation_block = None;
         self.operation_blocks.clear();
     }
@@ -408,6 +422,20 @@ enum OperationType {
 }
 
 pub(crate) struct DrawRectOperation(Rect, Color);
+
+struct DrawRectOperations {
+    operations: Vec<DrawRectOperation>,
+    buffers: Option<(Buffer, Buffer)>,
+}
+
+impl DrawRectOperations {
+    fn new() -> Self {
+        Self {
+            operations: Vec::new(),
+            buffers: None,
+        }
+    }
+}
 
 pub(crate) struct DrawTextureOperation {
     pub tex_coords: Rect,

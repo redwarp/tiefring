@@ -2,7 +2,7 @@ use std::{path::Path, rc::Rc, sync::atomic::AtomicUsize};
 
 use wgpu::{util::DeviceExt, BindGroup, BindGroupLayout, RenderPass, RenderPipeline, Sampler};
 
-use crate::{camera::Camera, Canvas, OperationBlock, Rect, Size, WgpuContext};
+use crate::{camera::Camera, Canvas, DrawTextureOperations, Rect, Size, WgpuContext};
 
 pub struct Sprite {
     pub dimensions: Size,
@@ -301,8 +301,8 @@ impl TextureRenderer {
                     layout: Some(&render_pipeline_layout),
                     vertex: wgpu::VertexState {
                         module: &shader,
-                        entry_point: "vs_main",                   // 1.
-                        buffers: &[TextureVertex::description()], // 2.
+                        entry_point: "vs_main",
+                        buffers: &[TextureVertex::description()],
                     },
                     fragment: Some(wgpu::FragmentState {
                         // 3.
@@ -316,9 +316,9 @@ impl TextureRenderer {
                         }],
                     }),
                     primitive: wgpu::PrimitiveState {
-                        topology: wgpu::PrimitiveTopology::TriangleList, // 1.
+                        topology: wgpu::PrimitiveTopology::TriangleList,
                         strip_index_format: None,
-                        front_face: wgpu::FrontFace::Ccw, // 2.
+                        front_face: wgpu::FrontFace::Ccw,
                         cull_mode: Some(wgpu::Face::Back),
                         // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
                         polygon_mode: wgpu::PolygonMode::Fill,
@@ -329,9 +329,9 @@ impl TextureRenderer {
                     },
                     depth_stencil: None,
                     multisample: wgpu::MultisampleState {
-                        count: 1,                         // 2.
-                        mask: !0,                         // 3.
-                        alpha_to_coverage_enabled: false, // 4.
+                        count: 1,
+                        mask: !0,
+                        alpha_to_coverage_enabled: false,
                     },
                 });
 
@@ -357,15 +357,15 @@ impl TextureRenderer {
         render_pass: &mut RenderPass<'a>,
         context: &'a WgpuContext,
         camera: &'a Camera,
-        operation_block: &'a mut OperationBlock,
+        draw_texture_operations: &'a mut DrawTextureOperations,
     ) {
-        let texture = match operation_block.draw_texture_operations.first() {
+        let texture = match draw_texture_operations.operations.first() {
             Some(operation) => operation.texture.clone(),
             None => return,
         };
 
-        let vertices: Vec<_> = operation_block
-            .draw_texture_operations
+        let vertices: Vec<_> = draw_texture_operations
+            .operations
             .iter()
             .flat_map(|operation| {
                 [
@@ -389,7 +389,7 @@ impl TextureRenderer {
             })
             .collect();
 
-        let indices: Vec<u16> = (0..operation_block.draw_texture_operations.len())
+        let indices: Vec<u16> = (0..draw_texture_operations.operations.len())
             .flat_map(|index| {
                 let step: u16 = index as u16 * 4;
                 [step + 0, step + 1, step + 2, step + 2, step + 3, step + 0]
@@ -410,19 +410,17 @@ impl TextureRenderer {
                 contents: bytemuck::cast_slice(&indices[..]),
                 usage: wgpu::BufferUsages::INDEX,
             });
-        operation_block
-            .draw_texture_buffers
-            .push((vertex_buffer, texture, indices, index_buffer));
 
-        for (vertex_buffer, texture, indices, index_buffer) in &operation_block.draw_texture_buffers
-        {
-            let indice_count = indices.len() as u32;
-            render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);
-            render_pass.set_bind_group(1, &texture.texture_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-            render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..indice_count, 0, 0..1);
-        }
+        let (texture, vertex_buffer, index_buffer, indices) = draw_texture_operations
+            .buffers
+            .insert((texture, vertex_buffer, index_buffer, indices));
+
+        let indice_count = indices.len() as u32;
+        render_pass.set_pipeline(&self.render_pipeline);
+        render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);
+        render_pass.set_bind_group(1, &texture.texture_bind_group, &[]);
+        render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+        render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        render_pass.draw_indexed(0..indice_count, 0, 0..1);
     }
 }
