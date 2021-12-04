@@ -80,7 +80,7 @@ impl Font {
 }
 
 enum CharType {
-    Regular(char),
+    Regular,
     WhiteSpace,
     LineBreak,
 }
@@ -90,7 +90,7 @@ impl CharType {
         match char {
             ' ' => CharType::WhiteSpace,
             '\n' => CharType::LineBreak,
-            char => CharType::Regular(char),
+            _ => CharType::Regular,
         }
     }
 }
@@ -438,11 +438,9 @@ impl TextRenderer {
                         buffers: &[TextVertex::description()],
                     },
                     fragment: Some(wgpu::FragmentState {
-                        // 3.
                         module: &shader,
                         entry_point: "fs_main",
                         targets: &[wgpu::ColorTargetState {
-                            // 4.
                             format: context.config.format,
                             blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                             write_mask: wgpu::ColorWrites::ALL,
@@ -455,16 +453,14 @@ impl TextRenderer {
                         cull_mode: Some(wgpu::Face::Back),
                         // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
                         polygon_mode: wgpu::PolygonMode::Fill,
-                        // Requires Features::DEPTH_CLAMPING
                         clamp_depth: false,
-                        // Requires Features::CONSERVATIVE_RASTERIZATION
                         conservative: false,
                     },
                     depth_stencil: None,
                     multisample: wgpu::MultisampleState {
-                        count: 1,                         // 2.
-                        mask: !0,                         // 3.
-                        alpha_to_coverage_enabled: false, // 4.
+                        count: 1,
+                        mask: !0,
+                        alpha_to_coverage_enabled: false,
                     },
                 });
 
@@ -519,7 +515,7 @@ impl TextRenderer {
                         left = operation.position.left;
                         top += new_line_size;
                     }
-                    CharType::Regular(_) => {
+                    CharType::Regular => {
                         let rect = if let Some(rect) = character.rect {
                             rect
                         } else {
