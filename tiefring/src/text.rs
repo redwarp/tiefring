@@ -3,9 +3,7 @@ use std::{cell::RefCell, collections::HashMap, fs, path::Path, rc::Rc};
 use fontdue::{LineMetrics, Metrics};
 
 use rect_packer::Packer;
-use wgpu::{
-    util::DeviceExt, BindGroup, BindGroupLayout, Color, RenderPass, RenderPipeline, Sampler,
-};
+use wgpu::{util::DeviceExt, BindGroup, BindGroupLayout, RenderPass, RenderPipeline, Sampler};
 
 use crate::{
     camera::Camera,
@@ -385,15 +383,6 @@ impl TextVertex {
     }
 }
 
-fn color_to_float_array(color: &Color) -> [f32; 4] {
-    [
-        color.r as f32,
-        color.g as f32,
-        color.b as f32,
-        color.a as f32,
-    ]
-}
-
 pub(crate) struct TextRenderer {
     render_pipeline: RenderPipeline,
 }
@@ -515,7 +504,7 @@ impl TextRenderer {
                     top + ascent - character.metrics.height as f32 - character.metrics.ymin as f32;
                 let bottom = char_top + rect.height as f32;
                 let right = left + rect.width as f32;
-                let color = color_to_float_array(&operation.color);
+                let color: [f32; 4] = operation.color.as_float_array();
 
                 vertices.push(TextVertex {
                     position: [left, char_top],

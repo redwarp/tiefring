@@ -7,7 +7,6 @@ use sprite::{Sprite, Texture, TextureId, TextureRenderer};
 use text::{Font, FontForPx, FontId, TextContext, TextRenderer};
 use thiserror::Error;
 
-pub use wgpu::Color;
 use wgpu::{Buffer, CommandEncoder, RenderPass, SurfaceError};
 
 mod camera;
@@ -98,7 +97,7 @@ impl Canvas {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(self.canvas_settings.background_color),
+                        load: wgpu::LoadOp::Clear(self.canvas_settings.background_color.into()),
                         store: true,
                     },
                 }],
@@ -567,6 +566,31 @@ impl From<(u32, u32)> for Size {
             width: size.0,
             height: size.1,
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Color {
+    pub r: f32,
+    pub g: f32,
+    pub b: f32,
+    pub a: f32,
+}
+
+impl Into<wgpu::Color> for Color {
+    fn into(self) -> wgpu::Color {
+        wgpu::Color {
+            r: self.r as f64,
+            g: self.g as f64,
+            b: self.b as f64,
+            a: self.a as f64,
+        }
+    }
+}
+
+impl Color {
+    fn as_float_array(&self) -> [f32; 4] {
+        [self.r, self.g, self.b, self.a]
     }
 }
 

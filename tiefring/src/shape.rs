@@ -1,4 +1,4 @@
-use wgpu::{util::DeviceExt, Color, RenderPass, RenderPipeline};
+use wgpu::{util::DeviceExt, RenderPass, RenderPipeline};
 
 use crate::{camera::Camera, DrawRectOperation, DrawRectOperations, WgpuContext};
 
@@ -28,15 +28,6 @@ impl ColorVertex {
             ],
         }
     }
-}
-
-fn color_to_float_array(color: &Color) -> [f32; 4] {
-    [
-        color.r as f32,
-        color.g as f32,
-        color.b as f32,
-        color.a as f32,
-    ]
 }
 
 pub(crate) struct ColorRenderer {
@@ -117,7 +108,7 @@ impl ColorRenderer {
             .operations
             .iter()
             .flat_map(|&DrawRectOperation(rect, color)| {
-                let color: [f32; 4] = color_to_float_array(&color);
+                let color: [f32; 4] = color.as_float_array();
                 [
                     ColorVertex {
                         position: [rect.left as f32, rect.top as f32],

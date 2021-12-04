@@ -207,9 +207,9 @@ impl Snake {
             })
             .collect();
 
-        let count = (squares.len() - 1) as f64;
+        let count = (squares.len() - 1) as f32;
         for (index, rect) in squares.into_iter().enumerate() {
-            let percent = index as f64 / count;
+            let percent = index as f32 / count;
             graphics.draw_rect(rect, RED.interpolate(&ORANGE, percent));
         }
     }
@@ -718,13 +718,13 @@ fn main() {
 trait Interpolator<Rhs = Self> {
     type Output;
 
-    fn interpolate(&self, other: &Rhs, percent: f64) -> Self::Output;
+    fn interpolate(&self, other: &Rhs, percent: f32) -> Self::Output;
 }
 
 impl Interpolator for Color {
     type Output = Color;
 
-    fn interpolate(&self, other: &Self, percent: f64) -> Self::Output {
+    fn interpolate(&self, other: &Self, percent: f32) -> Self::Output {
         Color {
             r: self.a * (1.0 - percent) + other.r * percent,
             g: self.g * (1.0 - percent) + other.g * percent,
