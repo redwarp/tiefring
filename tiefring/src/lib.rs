@@ -4,7 +4,7 @@ use camera::Camera;
 use raw_window_handle::HasRawWindowHandle;
 use shape::ColorRenderer;
 use sprite::{Sprite, Texture, TextureId, TextureRenderer};
-use text::{Font, FontForPx, FontId, TextContext, TextRenderer};
+use text::{Font, FontId, SizedFont, TextContext, TextRenderer};
 use thiserror::Error;
 
 use wgpu::{Buffer, CommandEncoder, RenderPass, SurfaceError};
@@ -444,7 +444,7 @@ pub(crate) struct DrawTextureOperation {
 
 pub(crate) struct DrawTextOperation {
     pub position: Position,
-    pub font_for_px: Rc<RefCell<FontForPx>>,
+    pub font_for_px: Rc<RefCell<SizedFont>>,
     pub text: String,
     pub color: Color,
 }

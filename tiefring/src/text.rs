@@ -17,7 +17,7 @@ pub(crate) struct FontId(pub(crate) usize, pub(crate) u32);
 
 pub struct Font {
     pub(crate) font: Rc<fontdue::Font>,
-    font_cache: HashMap<u32, Rc<RefCell<FontForPx>>>,
+    font_cache: HashMap<u32, Rc<RefCell<SizedFont>>>,
 }
 
 static CACHE_WIDTH: u32 = 1024;
@@ -37,10 +37,10 @@ impl Font {
         self.prepare_chars(px, text, &canvas.wgpu_context, &canvas.text_context);
     }
 
-    pub(crate) fn get_font_for_px(&mut self, px: u32) -> Rc<RefCell<FontForPx>> {
+    pub(crate) fn get_font_for_px(&mut self, px: u32) -> Rc<RefCell<SizedFont>> {
         self.font_cache
             .entry(px)
-            .or_insert_with(|| Rc::new(RefCell::new(FontForPx::new(px, self.font.clone()))))
+            .or_insert_with(|| Rc::new(RefCell::new(SizedFont::new(px, self.font.clone()))))
             .clone()
     }
 
@@ -70,7 +70,7 @@ impl Font {
         let mut cache = self
             .font_cache
             .entry(px)
-            .or_insert_with(|| Rc::new(RefCell::new(FontForPx::new(px, self.font.clone()))))
+            .or_insert_with(|| Rc::new(RefCell::new(SizedFont::new(px, self.font.clone()))))
             .borrow_mut();
 
         for missing_char in missing_chars {
@@ -79,23 +79,22 @@ impl Font {
     }
 }
 
-struct Character {
+struct CharacterReference {
     metrics: Metrics,
     tex_coords: Rect,
-    character: char,
     rect: Option<rect_packer::Rect>,
 }
 
-pub(crate) struct FontForPx {
+pub(crate) struct SizedFont {
     px: u32,
     texture: Option<Rc<Texture>>,
     packer: Packer,
     font: Rc<fontdue::Font>,
-    characters: HashMap<char, Character>,
+    characters: HashMap<char, CharacterReference>,
     horizontal_line_metrics: LineMetrics,
 }
 
-impl FontForPx {
+impl SizedFont {
     fn new(px: u32, font: Rc<fontdue::Font>) -> Self {
         let texture = None;
         let packer = Packer::new(rect_packer::Config {
@@ -108,6 +107,8 @@ impl FontForPx {
         let horizontal_line_metrics = font
             .horizontal_line_metrics(px as f32)
             .expect("We only handle horizontal fonts for now");
+
+        println!("Line metrics: {:?}", horizontal_line_metrics);
 
         Self {
             px,
@@ -126,7 +127,7 @@ impl FontForPx {
     ) -> Rc<Texture> {
         self.texture
             .get_or_insert_with(|| {
-                Rc::new(FontForPx::font_texture(
+                Rc::new(SizedFont::font_texture(
                     wgpu_context,
                     &text_context.texture_bind_group_layout,
                     &text_context.sampler,
@@ -140,7 +141,7 @@ impl FontForPx {
         char: char,
         wgpu_context: &WgpuContext,
         text_context: &TextContext,
-    ) -> Option<&Character> {
+    ) -> Option<&CharacterReference> {
         if self.contains(&char) {
             self.characters.get(&char)
         } else {
@@ -157,13 +158,15 @@ impl FontForPx {
         char: char,
         wgpu_context: &WgpuContext,
         text_context: &TextContext,
-    ) -> Option<&Character> {
+    ) -> Option<&CharacterReference> {
         let (metrics, bitmap) = self.font.rasterize(char, self.px as f32);
+
+        println!("Char '{}': {:?}", char, metrics);
 
         if metrics.width == 0 || metrics.height == 0 {
             // A character without dimension, probably white space.
 
-            let character = Character {
+            let character = CharacterReference {
                 metrics,
                 tex_coords: Rect {
                     left: 0.0,
@@ -171,7 +174,6 @@ impl FontForPx {
                     right: 0.0,
                     bottom: 0.0,
                 },
-                character: char,
                 rect: None,
             };
 
@@ -185,7 +187,7 @@ impl FontForPx {
 
         if let Some(packed) = packed {
             let texture = self.texture.get_or_insert_with(|| {
-                Rc::new(FontForPx::font_texture(
+                Rc::new(SizedFont::font_texture(
                     wgpu_context,
                     &text_context.texture_bind_group_layout,
                     &text_context.sampler,
@@ -225,10 +227,9 @@ impl FontForPx {
                 bottom: packed.bottom() as f32 / 1024.0,
             };
 
-            let character = Character {
+            let character = CharacterReference {
                 metrics,
                 tex_coords,
-                character: char,
                 rect: Some(packed),
             };
 
@@ -492,27 +493,28 @@ impl TextRenderer {
                         None => continue,
                     };
 
-                left += character.metrics.xmin as f32;
+                // left += character.metrics.xmin as f32;
                 let rect = if let Some(rect) = character.rect {
                     rect
                 } else {
                     left += character.metrics.advance_width.round();
                     continue;
                 };
+                let char_left = left + character.metrics.xmin as f32;
 
                 let char_top =
                     top + ascent - character.metrics.height as f32 - character.metrics.ymin as f32;
                 let bottom = char_top + rect.height as f32;
-                let right = left + rect.width as f32;
+                let right = char_left + rect.width as f32;
                 let color: [f32; 4] = operation.color.as_float_array();
 
                 vertices.push(TextVertex {
-                    position: [left, char_top],
+                    position: [char_left, char_top],
                     tex_coords: [character.tex_coords.left, character.tex_coords.top],
                     color,
                 });
                 vertices.push(TextVertex {
-                    position: [left, bottom],
+                    position: [char_left, bottom],
                     tex_coords: [character.tex_coords.left, character.tex_coords.bottom],
                     color,
                 });
@@ -527,7 +529,7 @@ impl TextRenderer {
                     color,
                 });
 
-                left += character.metrics.width as f32;
+                left += character.metrics.advance_width as f32;
             }
         }
 
