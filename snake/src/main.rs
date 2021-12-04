@@ -301,7 +301,7 @@ impl Sprites {
             .for_folder("snake/sprites")
             .unwrap();
         let fonts = find_folder::Search::ParentsThenKids(3, 3)
-            .for_folder("snake/fonts")
+            .for_folder("resources/fonts")
             .unwrap();
         Self {
             start: Sprite::load_image(canvas, sprites.join("start.png")).unwrap(),

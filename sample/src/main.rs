@@ -58,10 +58,11 @@ fn main() {
         TileSet::load_image(&mut canvas, sprites.join("basictiles.png"), (16, 16)).unwrap();
 
     let fonts = find_folder::Search::ParentsThenKids(3, 3)
-        .for_folder("sample/fonts")
+        .for_folder("resources/fonts")
         .unwrap();
 
     let mut roboto_regular = Font::load_font(fonts.join("Roboto-Regular.ttf")).unwrap();
+    let mut vt323_regular = Font::load_font(fonts.join("VT323-Regular.ttf")).unwrap();
 
     window.set_visible(true);
 
@@ -152,7 +153,7 @@ fn main() {
 
                     graphics.draw_text(
                         &mut roboto_regular,
-                        "Wehp this is some text it seems!",
+                        "Wehp this is some text it seems!\n(With some line break, too.)",
                         32,
                         Position::new(0.0, 0.0),
                         Color {
@@ -174,6 +175,18 @@ fn main() {
                             a: 0.5,
                         },
                     );
+                    graphics.draw_text(
+                        &mut &mut vt323_regular,
+                        "Let's see how monospace\nfonts behave.\nPretty good it seems!ç",
+                        20,
+                        Position::new(20.0, 300.0),
+                        Color {
+                            r: 2.0,
+                            g: 2.0,
+                            b: 2.0,
+                            a: 0.75,
+                        },
+                    )
                 })
                 .unwrap();
         }

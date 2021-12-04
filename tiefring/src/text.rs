@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, fs, path::Path, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, fmt::Debug, fs, path::Path, rc::Rc};
 
 use fontdue::{LineMetrics, Metrics};
 
@@ -79,10 +79,27 @@ impl Font {
     }
 }
 
+enum CharType {
+    Regular(char),
+    WhiteSpace,
+    LineBreak,
+}
+
+impl CharType {
+    fn new(char: char) -> Self {
+        match char {
+            ' ' => CharType::WhiteSpace,
+            '\n' => CharType::LineBreak,
+            char => CharType::Regular(char),
+        }
+    }
+}
+
 struct CharacterReference {
     metrics: Metrics,
     tex_coords: Rect,
     rect: Option<rect_packer::Rect>,
+    char_type: CharType,
 }
 
 pub(crate) struct SizedFont {
@@ -107,8 +124,6 @@ impl SizedFont {
         let horizontal_line_metrics = font
             .horizontal_line_metrics(px as f32)
             .expect("We only handle horizontal fonts for now");
-
-        println!("Line metrics: {:?}", horizontal_line_metrics);
 
         Self {
             px,
@@ -161,11 +176,10 @@ impl SizedFont {
     ) -> Option<&CharacterReference> {
         let (metrics, bitmap) = self.font.rasterize(char, self.px as f32);
 
-        println!("Char '{}': {:?}", char, metrics);
-
-        if metrics.width == 0 || metrics.height == 0 {
+        if metrics.width == 0 || metrics.height == 0 || bitmap.len() == 0 {
             // A character without dimension, probably white space.
 
+            let char_type = CharType::new(char);
             let character = CharacterReference {
                 metrics,
                 tex_coords: Rect {
@@ -175,6 +189,7 @@ impl SizedFont {
                     bottom: 0.0,
                 },
                 rect: None,
+                char_type,
             };
 
             self.characters.insert(char, character);
@@ -226,11 +241,13 @@ impl SizedFont {
                 right: packed.right() as f32 / 1024.0,
                 bottom: packed.bottom() as f32 / 1024.0,
             };
+            let char_type = CharType::new(char);
 
             let character = CharacterReference {
                 metrics,
                 tex_coords,
                 rect: Some(packed),
+                char_type,
             };
 
             self.characters.insert(char, character);
@@ -483,9 +500,10 @@ impl TextRenderer {
             .get_or_create_texture(wgpu_context, text_context);
 
         for operation in draw_text_operations.operations.iter() {
-            let Position { mut left, top } = operation.position;
+            let Position { mut left, mut top } = operation.position;
             let mut font_for_px = operation.font_for_px.borrow_mut();
             let ascent = font_for_px.horizontal_line_metrics.ascent;
+            let new_line_size = font_for_px.horizontal_line_metrics.new_line_size;
             for char in operation.text.chars() {
                 let character =
                     match font_for_px.get_or_create_character(char, wgpu_context, text_context) {
@@ -493,43 +511,53 @@ impl TextRenderer {
                         None => continue,
                     };
 
-                // left += character.metrics.xmin as f32;
-                let rect = if let Some(rect) = character.rect {
-                    rect
-                } else {
-                    left += character.metrics.advance_width.round();
-                    continue;
-                };
-                let char_left = left + character.metrics.xmin as f32;
+                match character.char_type {
+                    CharType::WhiteSpace => {
+                        left += character.metrics.advance_width.round();
+                    }
+                    CharType::LineBreak => {
+                        left = operation.position.left;
+                        top += new_line_size;
+                    }
+                    CharType::Regular(_) => {
+                        let rect = if let Some(rect) = character.rect {
+                            rect
+                        } else {
+                            continue;
+                        };
+                        let char_left = left + character.metrics.xmin as f32;
 
-                let char_top =
-                    top + ascent - character.metrics.height as f32 - character.metrics.ymin as f32;
-                let bottom = char_top + rect.height as f32;
-                let right = char_left + rect.width as f32;
-                let color: [f32; 4] = operation.color.as_float_array();
+                        let char_top = top + ascent
+                            - character.metrics.height as f32
+                            - character.metrics.ymin as f32;
+                        let bottom = char_top + rect.height as f32;
+                        let right = char_left + rect.width as f32;
+                        let color: [f32; 4] = operation.color.as_float_array();
 
-                vertices.push(TextVertex {
-                    position: [char_left, char_top],
-                    tex_coords: [character.tex_coords.left, character.tex_coords.top],
-                    color,
-                });
-                vertices.push(TextVertex {
-                    position: [char_left, bottom],
-                    tex_coords: [character.tex_coords.left, character.tex_coords.bottom],
-                    color,
-                });
-                vertices.push(TextVertex {
-                    position: [right, bottom],
-                    tex_coords: [character.tex_coords.right, character.tex_coords.bottom],
-                    color,
-                });
-                vertices.push(TextVertex {
-                    position: [right, char_top],
-                    tex_coords: [character.tex_coords.right, character.tex_coords.top],
-                    color,
-                });
+                        vertices.push(TextVertex {
+                            position: [char_left, char_top],
+                            tex_coords: [character.tex_coords.left, character.tex_coords.top],
+                            color,
+                        });
+                        vertices.push(TextVertex {
+                            position: [char_left, bottom],
+                            tex_coords: [character.tex_coords.left, character.tex_coords.bottom],
+                            color,
+                        });
+                        vertices.push(TextVertex {
+                            position: [right, bottom],
+                            tex_coords: [character.tex_coords.right, character.tex_coords.bottom],
+                            color,
+                        });
+                        vertices.push(TextVertex {
+                            position: [right, char_top],
+                            tex_coords: [character.tex_coords.right, character.tex_coords.top],
+                            color,
+                        });
 
-                left += character.metrics.advance_width as f32;
+                        left += character.metrics.advance_width as f32;
+                    }
+                }
             }
         }
 
