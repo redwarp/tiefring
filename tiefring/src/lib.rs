@@ -1,13 +1,12 @@
-use std::{cell::RefCell, path::Path, rc::Rc};
+use std::path::Path;
 
 use camera::Camera;
 use raw_window_handle::HasRawWindowHandle;
-use shape::ColorRenderer;
-use sprite::{Sprite, Texture, TextureId, TextureRenderer};
-use text::{Font, FontId, SizedFont, TextContext, TextRenderer};
+use shape::{ColorRenderer, DrawRectOperation, DrawRectOperations};
+use sprite::{DrawTextureOperation, DrawTextureOperations, Sprite, TextureId, TextureRenderer};
+use text::{DrawTextOperation, DrawTextOperations, Font, FontId, TextContext, TextRenderer};
 use thiserror::Error;
-
-use wgpu::{Buffer, CommandEncoder, RenderPass, SurfaceError};
+use wgpu::{CommandEncoder, RenderPass, SurfaceError};
 
 mod camera;
 mod shape;
@@ -307,34 +306,6 @@ impl OperationBlock {
     }
 }
 
-struct DrawTextOperations {
-    operations: Vec<DrawTextOperation>,
-    buffers: Option<(Rc<Texture>, Buffer, Buffer)>,
-}
-
-impl DrawTextOperations {
-    fn new() -> Self {
-        Self {
-            operations: Vec::new(),
-            buffers: None,
-        }
-    }
-}
-
-struct DrawTextureOperations {
-    operations: Vec<DrawTextureOperation>,
-    buffers: Option<(Rc<Texture>, Buffer, Buffer, Vec<u16>)>,
-}
-
-impl DrawTextureOperations {
-    fn new() -> Self {
-        Self {
-            operations: Vec::new(),
-            buffers: None,
-        }
-    }
-}
-
 impl Graphics {
     fn new() -> Self {
         Graphics {
@@ -418,35 +389,6 @@ enum OperationType {
     DrawRect,
     DrawTexture(TextureId),
     DrawText(FontId),
-}
-
-pub(crate) struct DrawRectOperation(Rect, Color);
-
-struct DrawRectOperations {
-    operations: Vec<DrawRectOperation>,
-    buffers: Option<(Buffer, Buffer)>,
-}
-
-impl DrawRectOperations {
-    fn new() -> Self {
-        Self {
-            operations: Vec::new(),
-            buffers: None,
-        }
-    }
-}
-
-pub(crate) struct DrawTextureOperation {
-    pub tex_coords: Rect,
-    pub destination: Rect,
-    pub texture: Rc<Texture>,
-}
-
-pub(crate) struct DrawTextOperation {
-    pub position: Position,
-    pub font_for_px: Rc<RefCell<SizedFont>>,
-    pub text: String,
-    pub color: Color,
 }
 
 #[derive(Clone, Copy, Debug)]

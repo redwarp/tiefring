@@ -1,6 +1,22 @@
-use wgpu::{util::DeviceExt, RenderPass, RenderPipeline};
+use wgpu::{util::DeviceExt, Buffer, RenderPass, RenderPipeline};
 
-use crate::{camera::Camera, DrawRectOperation, DrawRectOperations, WgpuContext};
+use crate::{camera::Camera, Color, Rect, WgpuContext};
+
+pub(crate) struct DrawRectOperation(pub Rect, pub Color);
+
+pub(crate) struct DrawRectOperations {
+    pub operations: Vec<DrawRectOperation>,
+    buffers: Option<(Buffer, Buffer)>,
+}
+
+impl DrawRectOperations {
+    pub fn new() -> Self {
+        Self {
+            operations: Vec::new(),
+            buffers: None,
+        }
+    }
+}
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]

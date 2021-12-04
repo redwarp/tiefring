@@ -1,9 +1,30 @@
 use std::{path::Path, rc::Rc, sync::atomic::AtomicUsize};
 
-use wgpu::{util::DeviceExt, BindGroup, BindGroupLayout, RenderPass, RenderPipeline, Sampler};
+use wgpu::{
+    util::DeviceExt, BindGroup, BindGroupLayout, Buffer, RenderPass, RenderPipeline, Sampler,
+};
 
-use crate::{camera::Camera, Canvas, DrawTextureOperations, Rect, Size, WgpuContext};
+use crate::{camera::Camera, Canvas, Rect, Size, WgpuContext};
 
+pub(crate) struct DrawTextureOperation {
+    pub tex_coords: Rect,
+    pub destination: Rect,
+    pub texture: Rc<Texture>,
+}
+
+pub(crate) struct DrawTextureOperations {
+    pub operations: Vec<DrawTextureOperation>,
+    buffers: Option<(Rc<Texture>, Buffer, Buffer, Vec<u16>)>,
+}
+
+impl DrawTextureOperations {
+    pub fn new() -> Self {
+        Self {
+            operations: Vec::new(),
+            buffers: None,
+        }
+    }
+}
 pub struct Sprite {
     pub dimensions: Size,
     pub(crate) tex_coords: Rect,

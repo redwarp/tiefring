@@ -1,16 +1,37 @@
 use std::{cell::RefCell, collections::HashMap, fmt::Debug, fs, path::Path, rc::Rc};
 
 use fontdue::{LineMetrics, Metrics};
-
 use rect_packer::Packer;
-use wgpu::{util::DeviceExt, BindGroup, BindGroupLayout, RenderPass, RenderPipeline, Sampler};
+use wgpu::{
+    util::DeviceExt, BindGroup, BindGroupLayout, Buffer, RenderPass, RenderPipeline, Sampler,
+};
 
 use crate::{
     camera::Camera,
     sprite::Texture,
     sprite::{TextureId, TEXTURE_INDEX},
-    Canvas, DrawTextOperations, Position, Rect, WgpuContext,
+    Canvas, Color, Position, Rect, WgpuContext,
 };
+
+pub(crate) struct DrawTextOperation {
+    pub position: Position,
+    pub font_for_px: Rc<RefCell<SizedFont>>,
+    pub text: String,
+    pub color: Color,
+}
+pub(crate) struct DrawTextOperations {
+    pub operations: Vec<DrawTextOperation>,
+    buffers: Option<(Rc<Texture>, Buffer, Buffer)>,
+}
+
+impl DrawTextOperations {
+    pub fn new() -> Self {
+        Self {
+            operations: Vec::new(),
+            buffers: None,
+        }
+    }
+}
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 pub(crate) struct FontId(pub(crate) usize, pub(crate) u32);
