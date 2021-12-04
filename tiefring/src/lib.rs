@@ -6,7 +6,7 @@ use shape::{ColorRenderer, DrawRectOperation, DrawRectOperations};
 use sprite::{DrawTextureOperation, DrawTextureOperations, Sprite, TextureId, TextureRenderer};
 use text::{DrawTextOperation, DrawTextOperations, Font, FontId, TextContext, TextRenderer};
 use thiserror::Error;
-use wgpu::{CommandEncoder, RenderPass, SurfaceError};
+use wgpu::{CommandEncoder, RenderPass};
 
 mod camera;
 mod shape;
@@ -62,7 +62,7 @@ impl Canvas {
         })
     }
 
-    pub fn draw<'a, F>(&'a mut self, draw_function: F) -> Result<(), Error>
+    pub fn draw<F>(&mut self, draw_function: F) -> Result<(), Error>
     where
         F: FnOnce(&mut Graphics),
     {
@@ -83,7 +83,7 @@ impl Canvas {
             .wgpu_context
             .surface
             .get_current_texture()
-            .map_err(|error: SurfaceError| Error::RenderingFailed(error))?;
+            .map_err(Error::RenderingFailed)?;
         let view = self
             .wgpu_context
             .buffer_texture
@@ -217,19 +217,19 @@ impl Canvas {
     fn handle_draw_operations<'a>(&'a mut self, render_pass: &mut RenderPass<'a>) {
         for operation_block in self.graphics.operation_blocks.iter_mut() {
             match operation_block.operation_type {
-                OperationType::DrawRect => self.color_renderer.render(
+                DrawOperationType::Rect => self.color_renderer.render(
                     render_pass,
                     &self.wgpu_context,
                     &self.camera,
                     &mut operation_block.draw_rect_operations,
                 ),
-                OperationType::DrawTexture(_) => self.texture_renderer.render(
+                DrawOperationType::Texture(_) => self.texture_renderer.render(
                     render_pass,
                     &self.wgpu_context,
                     &self.camera,
                     &mut operation_block.draw_texture_operations,
                 ),
-                OperationType::DrawText(_) => self.text_renderer.render(
+                DrawOperationType::Text(_) => self.text_renderer.render(
                     render_pass,
                     &self.wgpu_context,
                     &self.text_context,
@@ -271,14 +271,14 @@ pub struct Graphics {
 }
 
 struct OperationBlock {
-    operation_type: OperationType,
+    operation_type: DrawOperationType,
     draw_rect_operations: DrawRectOperations,
     draw_texture_operations: DrawTextureOperations,
     draw_text_operations: DrawTextOperations,
 }
 
 impl OperationBlock {
-    fn new(operation_type: OperationType) -> Self {
+    fn new(operation_type: DrawOperationType) -> Self {
         OperationBlock {
             operation_type,
             draw_rect_operations: DrawRectOperations::new(),
@@ -315,7 +315,7 @@ impl Graphics {
     }
 
     pub fn draw_rect<R: Into<Rect>>(&mut self, rect: R, color: Color) {
-        self.get_operation_block(OperationType::DrawRect)
+        self.get_operation_block(DrawOperationType::Rect)
             .push_draw_rect_operation(DrawRectOperation(rect.into(), color));
     }
 
@@ -333,7 +333,7 @@ impl Graphics {
         let tex_coords = sprite.tex_coords;
         let destination = rect.into();
         let texture = sprite.texture.clone();
-        self.get_operation_block(OperationType::DrawTexture(sprite.texture.id))
+        self.get_operation_block(DrawOperationType::Texture(sprite.texture.id))
             .push_draw_texture_operation(DrawTextureOperation {
                 tex_coords,
                 destination,
@@ -351,7 +351,7 @@ impl Graphics {
     ) {
         let text: String = text.into();
         let font_for_px = font.get_font_for_px(px);
-        self.get_operation_block(OperationType::DrawText(FontId(font.font.file_hash(), px)))
+        self.get_operation_block(DrawOperationType::Text(FontId(font.font.file_hash(), px)))
             .push_draw_text_operation(DrawTextOperation {
                 font_for_px,
                 position,
@@ -365,12 +365,8 @@ impl Graphics {
         self.operation_blocks.clear();
     }
 
-    fn get_operation_block(&mut self, current_operation: OperationType) -> &mut OperationBlock {
-        let need_new = match &self.current_operation_block {
-            Some(operation_block) if operation_block.operation_type == current_operation => false,
-            _ => true,
-        };
-
+    fn get_operation_block(&mut self, current_operation: DrawOperationType) -> &mut OperationBlock {
+        let need_new = !matches!(&self.current_operation_block, Some(operation_block) if operation_block.operation_type == current_operation);
         if need_new {
             if let Some(operation_block) = self.current_operation_block.take() {
                 self.operation_blocks.push(operation_block);
@@ -385,10 +381,10 @@ impl Graphics {
 }
 
 #[derive(PartialEq)]
-enum OperationType {
-    DrawRect,
-    DrawTexture(TextureId),
-    DrawText(FontId),
+enum DrawOperationType {
+    Rect,
+    Texture(TextureId),
+    Text(FontId),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -519,13 +515,13 @@ pub struct Color {
     pub a: f32,
 }
 
-impl Into<wgpu::Color> for Color {
-    fn into(self) -> wgpu::Color {
+impl From<Color> for wgpu::Color {
+    fn from(color: Color) -> Self {
         wgpu::Color {
-            r: self.r as f64,
-            g: self.g as f64,
-            b: self.b as f64,
-            a: self.a as f64,
+            r: color.r as f64,
+            g: color.g as f64,
+            b: color.b as f64,
+            a: color.a as f64,
         }
     }
 }

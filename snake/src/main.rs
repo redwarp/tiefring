@@ -18,7 +18,6 @@ use winit::{
     window::WindowBuilder,
 };
 use winit_input_helper::WinitInputHelper;
-use Option;
 
 const WIDTH: u8 = 30;
 const HEIGHT: u8 = 20;
@@ -144,22 +143,19 @@ impl Snake {
         let width = bounds.0 as i32;
         let height = bounds.1 as i32;
         let &Position { x, y } = &self.head().position;
-        if x < 0 || x >= width || y < 0 || y >= height {
-            true
-        } else {
-            false
-        }
+        x < 0 || x >= width || y < 0 || y >= height
     }
 
     fn update(&mut self, food: &Food, new_direction: Option<Direction>) {
         if let Some(direction) = new_direction {
-            let valid_direction = match (self.direction, direction) {
-                (Direction::Up, Direction::Down) => false,
-                (Direction::Down, Direction::Up) => false,
-                (Direction::Left, Direction::Right) => false,
-                (Direction::Right, Direction::Left) => false,
-                _ => true,
-            };
+            let valid_direction = !matches!(
+                (self.direction, direction),
+                (Direction::Up, Direction::Down)
+                    | (Direction::Down, Direction::Up)
+                    | (Direction::Left, Direction::Right)
+                    | (Direction::Right, Direction::Left)
+            );
+
             if valid_direction {
                 self.direction = direction;
             }
@@ -173,7 +169,7 @@ impl Snake {
     }
 
     fn is_eating(&self, food: &Food) -> bool {
-        &self.head().position == &food.position
+        self.head().position == food.position
     }
 
     fn render(&self, graphics: &mut Graphics) {
@@ -333,7 +329,7 @@ impl StartingScene {
         Self {
             size: (width, height),
             sprites,
-            terrain: terrain,
+            terrain,
         }
     }
 }
@@ -542,21 +538,12 @@ impl Scene for LosingScene {
         );
         graphics.draw_text(
             &mut self.sprites.borrow_mut().font,
-            format!("You scored {} points", self.score),
+            format!(
+                "You scored {} points.\nPress space to play again.",
+                self.score
+            ),
             40,
             position.translated(0.0, 80.0),
-            Color {
-                r: 0.0,
-                g: 0.0,
-                b: 0.0,
-                a: 1.0,
-            },
-        );
-        graphics.draw_text(
-            &mut self.sprites.borrow_mut().font,
-            "Press space to play again.",
-            40,
-            position.translated(0.0, 120.0),
             Color {
                 r: 0.0,
                 g: 0.0,

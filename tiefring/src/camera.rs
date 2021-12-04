@@ -91,7 +91,7 @@ impl Camera {
         canvas_zero: &CanvasZero,
     ) {
         let camera_uniform = CameraUniform {
-            projection: Camera::projection_matrix(width, height, &canvas_zero).into(),
+            projection: Camera::projection_matrix(width, height, canvas_zero).into(),
         };
 
         let updated_camera_buffer =
@@ -134,6 +134,6 @@ impl Camera {
             }
         };
 
-        return OPENGL_TO_WGPU_MATRIX * projection;
+        OPENGL_TO_WGPU_MATRIX * projection
     }
 }

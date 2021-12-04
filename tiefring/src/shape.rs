@@ -128,19 +128,19 @@ impl ColorRenderer {
                 [
                     ColorVertex {
                         position: [rect.left as f32, rect.top as f32],
-                        color: color,
+                        color,
                     },
                     ColorVertex {
                         position: [rect.left as f32, rect.bottom as f32],
-                        color: color,
+                        color,
                     },
                     ColorVertex {
                         position: [rect.right as f32, rect.bottom as f32],
-                        color: color,
+                        color,
                     },
                     ColorVertex {
                         position: [rect.right as f32, rect.top as f32],
-                        color: color,
+                        color,
                     },
                 ]
             })
@@ -149,7 +149,7 @@ impl ColorRenderer {
         let indices: Vec<u16> = (0..draw_rect_operations.operations.len())
             .flat_map(|index| {
                 let step: u16 = index as u16 * 4;
-                [step + 0, step + 1, step + 2, step + 2, step + 3, step + 0]
+                [step, step + 1, step + 2, step + 2, step + 3, step]
             })
             .collect();
 

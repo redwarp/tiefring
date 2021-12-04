@@ -74,7 +74,7 @@ impl Font {
     ) {
         let string: String = string.into();
         let mut chars: Vec<_> = string.chars().collect();
-        chars.sort();
+        chars.sort_unstable();
         chars.dedup();
 
         let cache = self.font_cache.get(&px);
@@ -197,7 +197,7 @@ impl SizedFont {
     ) -> Option<&CharacterReference> {
         let (metrics, bitmap) = self.font.rasterize(char, self.px as f32);
 
-        if metrics.width == 0 || metrics.height == 0 || bitmap.len() == 0 {
+        if metrics.width == 0 || metrics.height == 0 || bitmap.is_empty() {
             // A character without dimension, probably white space.
 
             let char_type = CharType::new(char);
@@ -316,18 +316,17 @@ impl SizedFont {
                         },
                         wgpu::BindGroupEntry {
                             binding: 1,
-                            resource: wgpu::BindingResource::Sampler(&sampler),
+                            resource: wgpu::BindingResource::Sampler(sampler),
                         },
                     ],
                     label: Some("diffuse_bind_group"),
                 });
 
-        let texture = Texture {
+        Texture {
             id: TextureId(id),
             texture: wgpu_texture,
             texture_bind_group,
-        };
-        texture
+        }
     }
 }
 
@@ -581,7 +580,7 @@ impl TextRenderer {
         let indices: Vec<u16> = (0..vertices.len() / 4)
             .flat_map(|index| {
                 let step: u16 = index as u16 * 4;
-                [step + 0, step + 1, step + 2, step + 2, step + 3, step + 0]
+                [step, step + 1, step + 2, step + 2, step + 3, step]
             })
             .collect();
 

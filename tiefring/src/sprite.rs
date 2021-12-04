@@ -114,7 +114,7 @@ impl TileSet {
         Some(TileSet::load_data::<(u32, u32), S>(
             canvas,
             &rgba,
-            dimensions.into(),
+            dimensions,
             tile_dimensions,
         ))
     }
@@ -217,12 +217,11 @@ impl Texture {
                     label: Some("diffuse_bind_group"),
                 });
 
-        let texture = Texture {
+        Texture {
             id: TextureId(id),
             texture: wgpu_texture,
             texture_bind_group,
-        };
-        texture
+        }
     }
 }
 
@@ -413,7 +412,7 @@ impl TextureRenderer {
         let indices: Vec<u16> = (0..draw_texture_operations.operations.len())
             .flat_map(|index| {
                 let step: u16 = index as u16 * 4;
-                [step + 0, step + 1, step + 2, step + 2, step + 3, step + 0]
+                [step, step + 1, step + 2, step + 2, step + 3, step]
             })
             .collect();
 
