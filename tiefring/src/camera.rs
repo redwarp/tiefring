@@ -1,4 +1,4 @@
-use cgmath::Matrix4;
+use glam::Mat4;
 use wgpu::{util::DeviceExt, BindGroup, BindGroupLayout, Buffer};
 
 use crate::{CanvasZero, WgpuContext};
@@ -10,18 +10,10 @@ use crate::{CanvasZero, WgpuContext};
 struct CameraUniform {
     // We can't use cgmath with bytemuck directly so we'll have
     // to convert the Matrix4 into a 4x4 f32 array
-    projection: [[f32; 4]; 4],
+    projection: [f32; 16],
 }
 
 impl CameraUniform {}
-
-#[rustfmt::skip]
-const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
-    1.0, 0.0, 0.0, 0.0,
-    0.0, 1.0, 0.0, 0.0,
-    0.0, 0.0, 0.5, 0.0,
-    0.0, 0.0, 0.5, 1.0,
-);
 
 pub struct Camera {
     pub(crate) camera_buffer: Buffer,
@@ -37,7 +29,7 @@ impl Camera {
         canvas_zero: &CanvasZero,
     ) -> Self {
         let camera_uniform = CameraUniform {
-            projection: Camera::projection_matrix(width, height, canvas_zero).into(),
+            projection: Camera::projection_matrix(width, height, canvas_zero),
         };
 
         let camera_buffer =
@@ -91,7 +83,7 @@ impl Camera {
         canvas_zero: &CanvasZero,
     ) {
         let camera_uniform = CameraUniform {
-            projection: Camera::projection_matrix(width, height, canvas_zero).into(),
+            projection: Camera::projection_matrix(width, height, canvas_zero),
         };
 
         let updated_camera_buffer =
@@ -119,21 +111,23 @@ impl Camera {
         wgpu_context.queue.submit(Some(encoder.finish()));
     }
 
-    fn projection_matrix(width: u32, height: u32, canvas_zero: &CanvasZero) -> Matrix4<f32> {
-        let projection = match canvas_zero {
-            CanvasZero::Centered => cgmath::ortho(
+    fn projection_matrix(width: u32, height: u32, canvas_zero: &CanvasZero) -> [f32; 16] {
+        match canvas_zero {
+            &CanvasZero::Centered => Mat4::orthographic_rh(
                 (-(width as f32 / 2.0)).floor(),
                 (width as f32 / 2.0).ceil(),
                 (height as f32 / 2.0).ceil(),
                 (-(height as f32 / 2.0)).floor(),
-                0.0,
-                1.0,
-            ),
-            CanvasZero::TopLeft => {
-                cgmath::ortho(0.0, width as f32, height as f32, 0.0, -100.0, 100.0)
+                -100.0,
+                100.0,
+            )
+            .as_ref()
+            .clone(),
+            &CanvasZero::TopLeft => {
+                Mat4::orthographic_rh(0.0, width as f32, height as f32, 0.0, -100.0, 100.0)
+                    .as_ref()
+                    .clone()
             }
-        };
-
-        OPENGL_TO_WGPU_MATRIX * projection
+        }
     }
 }
