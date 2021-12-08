@@ -176,7 +176,7 @@ fn main() {
                         },
                     );
                     graphics.draw_text(
-                        &mut &mut vt323_regular,
+                        &mut vt323_regular,
                         "Let's see how monospace\nfonts behave.\nPretty good it seems!ç",
                         20,
                         Position::new(20.0, 300.0),

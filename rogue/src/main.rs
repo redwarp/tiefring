@@ -3,11 +3,14 @@ use engine::Engine;
 
 use crate::game::Game;
 
+mod components;
 mod engine;
 mod game;
+mod inputs;
+mod spawner;
 
 fn main() -> Result<()> {
-    let mut game = Game::new();
+    let game = Game::new();
 
     let mut engine = Engine::new();
     engine.run(game)?;
