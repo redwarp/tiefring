@@ -1,7 +1,7 @@
 use bevy_ecs::prelude::{Entity, World};
 use tiefring::Color;
 
-use crate::components::{Body, Player, Position};
+use crate::components::{Body, LeftMover, Player, Position};
 
 pub fn player(world: &mut World, x: i32, y: i32) -> Entity {
     world
@@ -17,5 +17,6 @@ pub fn orc(world: &mut World, x: i32, y: i32) -> Entity {
         .spawn()
         .insert(Position::new(x, y))
         .insert(Body::new('o', Color::rgb(0.2, 0.9, 0.2)))
+        .insert(LeftMover)
         .id()
 }

@@ -23,3 +23,5 @@ impl Body {
 }
 
 pub struct Player;
+
+pub struct LeftMover;

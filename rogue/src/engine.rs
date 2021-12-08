@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use anyhow::Result;
-use tiefring::{text::Font, Canvas, CanvasSettings};
+use tiefring::{text::Font, Canvas, CanvasSettings, Graphics, Rect};
 use winit::{
     dpi::LogicalSize,
     event::Event,
@@ -14,6 +14,7 @@ use crate::{
     components::{Body, Position},
     game::Game,
     inputs::Input,
+    map::Map,
     spawner,
 };
 
@@ -76,20 +77,7 @@ impl Engine {
             if let Event::RedrawRequested(_) = event {
                 canvas
                     .draw(|graphics| {
-                        let mut query = game.world.query::<(&Body, &Position)>();
-                        query.for_each(&game.world, |(body, position)| {
-                            let position = tiefring::Position::new(
-                                position.x as f32 * TILE_SIZE,
-                                position.y as f32 * TILE_SIZE,
-                            );
-                            graphics.draw_text(
-                                &mut font,
-                                body.char.to_string(),
-                                TILE_SIZE as u32,
-                                position,
-                                body.color,
-                            );
-                        });
+                        render_game(&mut game, graphics, &mut font);
                     })
                     .unwrap();
             }
@@ -111,7 +99,44 @@ impl Engine {
                 if game.update(dt, Input::from_input_helper(&input_helper)) {
                     *control_flow = ControlFlow::Exit;
                 }
+
+                window.request_redraw();
             }
         });
+    }
+}
+
+fn render_game(game: &mut Game, graphics: &mut Graphics, font: &mut Font) {
+    if let Some(map) = game.world.get_resource::<Map>() {
+        for (j, lines) in map.lines().enumerate() {
+            for (i, tile) in lines.iter().enumerate() {
+                let rect = Rect::from_xywh(
+                    i as f32 * TILE_SIZE,
+                    j as f32 * TILE_SIZE,
+                    TILE_SIZE,
+                    TILE_SIZE,
+                );
+                graphics.draw_rect(rect, tile.color);
+            }
+        }
+    }
+
+    let mut query = game.world.query::<(&Body, &Position)>();
+    query.for_each(&game.world, |(body, position)| {
+        body.render(graphics, position, font);
+    });
+}
+
+impl Body {
+    fn render(&self, graphics: &mut Graphics, position: &Position, font: &mut Font) {
+        let position =
+            tiefring::Position::new(position.x as f32 * TILE_SIZE, position.y as f32 * TILE_SIZE);
+        graphics.draw_text(
+            font,
+            self.char.to_string(),
+            TILE_SIZE as u32,
+            position,
+            self.color,
+        );
     }
 }

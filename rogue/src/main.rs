@@ -7,7 +7,9 @@ mod components;
 mod engine;
 mod game;
 mod inputs;
+mod map;
 mod spawner;
+mod systems;
 
 fn main() -> Result<()> {
     let game = Game::new();
