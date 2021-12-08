@@ -113,7 +113,7 @@ impl Camera {
 
     fn projection_matrix(width: u32, height: u32, canvas_zero: &CanvasZero) -> [f32; 16] {
         match canvas_zero {
-            CanvasZero::Centered => *Mat4::orthographic_rh(
+            CanvasZero::Centered => Mat4::orthographic_rh(
                 (-(width as f32 / 2.0)).floor(),
                 (width as f32 / 2.0).ceil(),
                 (height as f32 / 2.0).ceil(),
@@ -121,10 +121,10 @@ impl Camera {
                 -100.0,
                 100.0,
             )
-            .as_ref(),
+            .to_cols_array(),
             CanvasZero::TopLeft => {
-                *Mat4::orthographic_rh(0.0, width as f32, height as f32, 0.0, -100.0, 100.0)
-                    .as_ref()
+                Mat4::orthographic_rh(0.0, width as f32, height as f32, 0.0, -100.0, 100.0)
+                    .to_cols_array()
             }
         }
     }
