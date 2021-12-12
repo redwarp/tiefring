@@ -18,16 +18,17 @@ use crate::{
     spawner,
 };
 
-const WIDTH_IN_TILES: u32 = 25;
-const HEIGHT_IN_TILES: u32 = 20;
 const TILE_SIZE: f32 = 32.0;
 const FONT_NAME: &str = "VT323-Regular.ttf";
 
-pub struct Engine {}
+pub struct Engine {
+    width: u32,
+    height: u32,
+}
 
 impl Engine {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(width: u32, height: u32) -> Self {
+        Self { width, height }
     }
 
     pub fn run(&mut self, mut game: Game) -> Result<()> {
@@ -36,8 +37,8 @@ impl Engine {
 
         let window = {
             let size = LogicalSize::new(
-                WIDTH_IN_TILES as f32 * TILE_SIZE,
-                HEIGHT_IN_TILES as f32 * TILE_SIZE,
+                self.width as f32 * TILE_SIZE,
+                self.height as f32 * TILE_SIZE,
             );
             WindowBuilder::new()
                 .with_title("Rogue")

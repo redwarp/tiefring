@@ -11,10 +11,13 @@ mod map;
 mod spawner;
 mod systems;
 
-fn main() -> Result<()> {
-    let game = Game::new();
+const WIDTH_IN_TILES: u32 = 25;
+const HEIGHT_IN_TILES: u32 = 20;
 
-    let mut engine = Engine::new();
+fn main() -> Result<()> {
+    let game = Game::new(WIDTH_IN_TILES, HEIGHT_IN_TILES);
+
+    let mut engine = Engine::new(WIDTH_IN_TILES, HEIGHT_IN_TILES);
     engine.run(game)?;
 
     Ok(())
