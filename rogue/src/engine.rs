@@ -1,7 +1,8 @@
 use std::time::Instant;
 
 use anyhow::Result;
-use tiefring::{text::Font, Canvas, CanvasSettings, Graphics, Rect};
+use bevy_ecs::prelude::Mut;
+use tiefring::{text::Font, Canvas, CanvasSettings, Color, Graphics, Rect};
 use winit::{
     dpi::LogicalSize,
     event::Event,
@@ -11,23 +12,23 @@ use winit::{
 use winit_input_helper::WinitInputHelper;
 
 use crate::{
-    components::{Body, Position},
+    components::{Body, FieldOfView, Player, Position},
     game::Game,
     inputs::Input,
     map::Map,
     spawner,
 };
 
-const TILE_SIZE: f32 = 32.0;
+const TILE_SIZE: f32 = 16.0;
 const FONT_NAME: &str = "VT323-Regular.ttf";
 
 pub struct Engine {
-    width: u32,
-    height: u32,
+    width: i32,
+    height: i32,
 }
 
 impl Engine {
-    pub fn new(width: u32, height: u32) -> Self {
+    pub fn new(width: i32, height: i32) -> Self {
         Self { width, height }
     }
 
@@ -108,20 +109,42 @@ impl Engine {
 }
 
 fn render_game(game: &mut Game, graphics: &mut Graphics, font: &mut Font) {
-    if let Some(map) = game.world.get_resource::<Map>() {
+    game.world.resource_scope(|world, map: Mut<Map>| {
         for (j, lines) in map.lines().enumerate() {
             for (i, tile) in lines.iter().enumerate() {
-                let rect = Rect::from_xywh(
-                    i as f32 * TILE_SIZE,
-                    j as f32 * TILE_SIZE,
-                    TILE_SIZE,
-                    TILE_SIZE,
-                );
-                graphics.draw_rect(rect, tile.color);
+                if map.is_revealed(i as i32, j as i32) {
+                    let rect = Rect::from_xywh(
+                        i as f32 * TILE_SIZE,
+                        j as f32 * TILE_SIZE,
+                        TILE_SIZE,
+                        TILE_SIZE,
+                    );
+                    graphics.draw_rect(rect, tile.color);
+
+                    if !map.is_visible(i as i32, j as i32) {
+                        graphics.draw_rect(rect, Color::rgba(0.0, 0.0, 0.0, 0.5));
+                    }
+                }
             }
         }
-    }
 
+        let mut query = world.query::<(&FieldOfView, &Player)>();
+        query.for_each(world, |(fov, _)| {
+            for (j, lines) in map.lines().enumerate() {
+                for (i, tile) in lines.iter().enumerate() {
+                    if fov.contains(i as i32, j as i32) {
+                        let rect = Rect::from_xywh(
+                            i as f32 * TILE_SIZE,
+                            j as f32 * TILE_SIZE,
+                            TILE_SIZE,
+                            TILE_SIZE,
+                        );
+                        graphics.draw_rect(rect, tile.color);
+                    }
+                }
+            }
+        });
+    });
     let mut query = game.world.query::<(&Body, &Position)>();
     query.for_each(&game.world, |(body, position)| {
         body.render(graphics, position, font);
@@ -130,14 +153,24 @@ fn render_game(game: &mut Game, graphics: &mut Graphics, font: &mut Font) {
 
 impl Body {
     fn render(&self, graphics: &mut Graphics, position: &Position, font: &mut Font) {
-        let position =
-            tiefring::Position::new(position.x as f32 * TILE_SIZE, position.y as f32 * TILE_SIZE);
-        graphics.draw_text(
-            font,
-            self.char.to_string(),
-            TILE_SIZE as u32,
-            position,
-            self.color,
-        );
+        draw_char(self.char, self.color, graphics, position, font);
     }
+}
+
+fn draw_char(
+    character: char,
+    color: Color,
+    graphics: &mut Graphics,
+    position: &Position,
+    font: &mut Font,
+) {
+    let position =
+        tiefring::Position::new(position.x as f32 * TILE_SIZE, position.y as f32 * TILE_SIZE);
+    graphics.draw_text(
+        font,
+        character.to_string(),
+        TILE_SIZE as u32,
+        position,
+        color,
+    );
 }

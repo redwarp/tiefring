@@ -7,6 +7,7 @@ use bevy_ecs::{
 };
 use rand::prelude::StdRng;
 use rand::SeedableRng;
+use torchbearer::Map as FovMap;
 
 use crate::components::{Player, Position};
 use crate::map::Map;
@@ -18,13 +19,27 @@ pub struct Game {
     stepper: Stepper,
 }
 
+#[derive(Debug, Clone, Hash, PartialEq, Eq, StageLabel)]
+enum Stages {
+    Update,
+    Map,
+}
+
 impl Game {
-    pub fn new(width: u32, height: u32) -> Self {
+    pub fn new(width: i32, height: i32) -> Self {
         let mut schedule = Schedule::default();
-        schedule.add_stage(
-            "update",
-            SystemStage::parallel().with_system(systems::move_randomly.system()),
-        );
+        schedule
+            .add_stage(
+                Stages::Update,
+                SystemStage::parallel()
+                    .with_system(systems::move_randomly.system())
+                    .with_system(systems::field_of_view.system()),
+            )
+            .add_stage_after(
+                Stages::Update,
+                Stages::Map,
+                SystemStage::parallel().with_system(systems::update_map.system()),
+            );
 
         let stepper = Stepper::new(Duration::new(0, 200_000_000));
         let mut world = World::new();

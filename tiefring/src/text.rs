@@ -10,7 +10,7 @@ use crate::{
     camera::Camera,
     sprite::Texture,
     sprite::{TextureId, TEXTURE_INDEX},
-    Canvas, Color, Position, Rect, WgpuContext,
+    Color, Position, Rect, WgpuContext,
 };
 
 pub(crate) struct DrawTextOperation {
@@ -54,8 +54,14 @@ impl Font {
         Some(Self { font, font_cache })
     }
 
-    pub fn test<S: Into<String>>(&mut self, canvas: &Canvas, px: u32, text: S) {
-        self.prepare_chars(px, text, &canvas.wgpu_context, &canvas.text_context);
+    pub fn measure(&self, character: char, px: u32) -> (f32, f32) {
+        let metrics = self.font.metrics(character, px as f32);
+        (metrics.bounds.width, metrics.bounds.height)
+    }
+
+    pub fn ascent(&self, px: u32) -> f32 {
+        let line_metrics = self.font.horizontal_line_metrics(px as f32).unwrap();
+        line_metrics.ascent
     }
 
     pub(crate) fn get_font_for_px(&mut self, px: u32) -> Rc<RefCell<SizedFont>> {
@@ -63,40 +69,6 @@ impl Font {
             .entry(px)
             .or_insert_with(|| Rc::new(RefCell::new(SizedFont::new(px, self.font.clone()))))
             .clone()
-    }
-
-    fn prepare_chars<S: Into<String>>(
-        &mut self,
-        px: u32,
-        string: S,
-        wgpu_context: &WgpuContext,
-        text_context: &TextContext,
-    ) {
-        let string: String = string.into();
-        let mut chars: Vec<_> = string.chars().collect();
-        chars.sort_unstable();
-        chars.dedup();
-
-        let cache = self.font_cache.get(&px);
-
-        let missing_chars = if let Some(cache) = cache {
-            chars
-                .into_iter()
-                .filter(|character| !cache.borrow().contains(character))
-                .collect()
-        } else {
-            chars
-        };
-
-        let mut cache = self
-            .font_cache
-            .entry(px)
-            .or_insert_with(|| Rc::new(RefCell::new(SizedFont::new(px, self.font.clone()))))
-            .borrow_mut();
-
-        for missing_char in missing_chars {
-            cache.create_character(missing_char, wgpu_context, text_context);
-        }
     }
 }
 

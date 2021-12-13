@@ -1,9 +1,15 @@
+use std::vec;
+
 use rand::Rng;
 use tiefring::Color;
+use torchbearer::Map as FovMap;
+
+use crate::components::Position;
 
 #[derive(Clone, Copy)]
 pub struct Tile {
     pub walkable: bool,
+    pub transparent: bool,
     pub color: Color,
 }
 
@@ -11,31 +17,45 @@ impl Tile {
     pub fn wall() -> Self {
         Self {
             walkable: false,
-            color: Color::rgb(0.1, 0.1, 0.1),
+            transparent: false,
+            color: Color::rgb(0.3, 0.2, 0.2),
         }
     }
 
     pub fn floor() -> Self {
         Self {
             walkable: true,
-            color: Color::rgb(0.4, 0.4, 0.4),
+            transparent: true,
+            color: Color::rgb(0.5, 0.5, 0.5),
         }
     }
 }
 
 pub struct Map {
-    pub width: u32,
-    pub height: u32,
+    pub width: i32,
+    pub height: i32,
     tiles: Vec<Tile>,
+    revealed_tiles: Vec<bool>,
+    visible_tiles: Vec<bool>,
 }
 
 impl Map {
-    pub fn empty(width: u32, height: u32) -> Self {
-        let tiles = vec![Tile::floor(); (width * height) as usize];
+    pub fn empty(width: i32, height: i32) -> Self {
+        if width < 1 || height < 1 {
+            panic!("Map dimension should be minimum 1x1");
+        }
+
+        let tile_count = (width * height) as usize;
+        let tiles = vec![Tile::floor(); tile_count];
+        let revealed_tiles = vec![false; tile_count];
+        let visible_tiles = vec![false; tile_count];
+
         Self {
             width,
             height,
             tiles,
+            revealed_tiles,
+            visible_tiles,
         }
     }
 
@@ -70,20 +90,62 @@ impl Map {
         self.tiles.chunks(self.width as usize)
     }
 
-    fn index(&self, x: u32, y: u32) -> usize {
-        (self.width * y + x) as usize
+    pub fn reset_visible(&mut self) {
+        for tile in self.visible_tiles.iter_mut() {
+            *tile = false;
+        }
+    }
+    pub fn reveal(&mut self, positions: &[Position]) {
+        for position in positions {
+            let index = self.index_from_position(position);
+            self.revealed_tiles[index] = true;
+            self.visible_tiles[index] = true;
+        }
     }
 
-    pub fn is_walkable(&self, x: i32, y: i32) -> bool {
+    pub fn is_visible(&self, x: i32, y: i32) -> bool {
+        let index = self.index(x, y);
+        self.visible_tiles[index]
+    }
+
+    pub fn is_revealed(&self, x: i32, y: i32) -> bool {
+        let index = self.index(x, y);
+        self.revealed_tiles[index]
+    }
+
+    fn index(&self, x: i32, y: i32) -> usize {
+        (self.width as i32 * y + x) as usize
+    }
+
+    fn index_from_position(&self, Position { x, y }: &Position) -> usize {
+        (self.width as i32 * y + x) as usize
+    }
+
+    fn in_bounds(&self, x: i32, y: i32) -> bool {
+        !(x < 0 || y < 0 || x >= self.width || y >= self.height)
+    }
+}
+
+impl FovMap for Map {
+    fn dimensions(&self) -> (i32, i32) {
+        (self.width as i32, self.height as i32)
+    }
+
+    fn is_transparent(&self, x: i32, y: i32) -> bool {
         if self.in_bounds(x, y) {
-            let index = self.index(x as u32, y as u32);
-            self.tiles[index].walkable
+            let index = self.index(x, y);
+            self.tiles[index].transparent
         } else {
             false
         }
     }
 
-    fn in_bounds(&self, x: i32, y: i32) -> bool {
-        !(x < 0 || y < 0 || x as u32 >= self.width || y as u32 >= self.height)
+    fn is_walkable(&self, x: i32, y: i32) -> bool {
+        if self.in_bounds(x, y) {
+            let index = self.index(x, y);
+            self.tiles[index].walkable
+        } else {
+            false
+        }
     }
 }

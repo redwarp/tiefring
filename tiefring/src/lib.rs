@@ -531,6 +531,10 @@ impl Color {
         Self { r, g, b, a: 1.0 }
     }
 
+    pub fn rgba(r: f32, g: f32, b: f32, a: f32) -> Self {
+        Self { r, g, b, a }
+    }
+
     fn as_float_array(&self) -> [f32; 4] {
         [self.r, self.g, self.b, self.a]
     }

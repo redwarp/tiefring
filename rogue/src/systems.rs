@@ -1,15 +1,16 @@
-use bevy_ecs::prelude::{Query, Res, ResMut, With};
+use bevy_ecs::prelude::{Changed, Query, Res, ResMut, With};
 use rand::{prelude::StdRng, Rng};
+use torchbearer::Map as FovMap;
 
 use crate::{
-    components::{LeftMover, Position},
+    components::{FieldOfView, Player, Position, RandomMover},
     map::Map,
 };
 
 pub fn move_randomly(
     mut rng: ResMut<StdRng>,
     map: Res<Map>,
-    query: Query<&mut Position, With<LeftMover>>,
+    query: Query<&mut Position, With<RandomMover>>,
 ) {
     query.for_each_mut(|mut position| {
         let direction = rng.gen_range(0..4);
@@ -27,5 +28,28 @@ pub fn move_randomly(
             position.x = x;
             position.y = y;
         }
+    });
+}
+
+pub fn field_of_view(
+    map: Res<Map>,
+    query: Query<(&mut FieldOfView, &Position), Changed<Position>>,
+) {
+    query.for_each_mut(|(mut field_of_view, position)| {
+        field_of_view.visible_positions = torchbearer::fov::field_of_view(
+            &*map,
+            (position.x, position.y),
+            field_of_view.view_distance,
+        )
+        .iter()
+        .map(|&(x, y)| Position::new(x, y))
+        .collect();
+    });
+}
+
+pub fn update_map(mut map: ResMut<Map>, query: Query<&FieldOfView, With<Player>>) {
+    map.reset_visible();
+    query.for_each(|field_of_view| {
+        map.reveal(&field_of_view.visible_positions);
     });
 }

@@ -11,8 +11,8 @@ mod map;
 mod spawner;
 mod systems;
 
-const WIDTH_IN_TILES: u32 = 25;
-const HEIGHT_IN_TILES: u32 = 20;
+const WIDTH_IN_TILES: i32 = 80;
+const HEIGHT_IN_TILES: i32 = 50;
 
 fn main() -> Result<()> {
     let game = Game::new(WIDTH_IN_TILES, HEIGHT_IN_TILES);

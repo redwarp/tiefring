@@ -1,5 +1,6 @@
 use tiefring::Color;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Position {
     pub x: i32,
     pub y: i32,
@@ -24,4 +25,22 @@ impl Body {
 
 pub struct Player;
 
-pub struct LeftMover;
+pub struct RandomMover;
+
+pub struct FieldOfView {
+    pub visible_positions: Vec<Position>,
+    pub view_distance: i32,
+}
+
+impl FieldOfView {
+    pub fn new(view_distance: i32) -> Self {
+        Self {
+            visible_positions: Vec::new(),
+            view_distance,
+        }
+    }
+
+    pub fn contains(&self, x: i32, y: i32) -> bool {
+        self.visible_positions.contains(&Position::new(x, y))
+    }
+}
