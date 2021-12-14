@@ -29,7 +29,6 @@ pub enum Update {
 pub struct Game {
     pub world: World,
     pub schedule: Schedule,
-    stepper: Stepper,
     run_state: RunState,
 }
 
@@ -55,7 +54,6 @@ impl Game {
                 SystemStage::parallel().with_system(systems::update_map.system()),
             );
 
-        let stepper = Stepper::new(Duration::new(0, 200_000_000));
         let mut world = World::new();
         let map = Map::empty(width, height).surround().random_walls();
         world.insert_resource(map);
@@ -67,12 +65,11 @@ impl Game {
         Self {
             world,
             schedule,
-            stepper,
             run_state,
         }
     }
 
-    pub fn update(&mut self, dt: Duration, input: Option<Input>) -> Update {
+    pub fn update(&mut self, input: Option<Input>) -> Update {
         match self.run_state {
             RunState::Running => {
                 self.schedule.run(&mut self.world);
@@ -121,11 +118,13 @@ impl Game {
     }
 }
 
+#[derive(Debug)]
 struct Stepper {
     dt: Duration,
     step: Duration,
 }
 
+#[allow(dead_code)]
 impl Stepper {
     fn new(step: Duration) -> Self {
         Self {
@@ -148,5 +147,35 @@ impl Stepper {
         } else {
             false
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::Stepper;
+
+    #[test]
+    fn stepper_advance_but_not_enough_returns_false() {
+        let mut stepper = Stepper::new(Duration::from_secs(1));
+
+        assert!(!stepper.advance(Duration::from_millis(500)));
+    }
+
+    #[test]
+    fn stepper_advance_just_enough_returns_true() {
+        let mut stepper = Stepper::new(Duration::from_secs(1));
+
+        assert!(stepper.advance(Duration::from_millis(1000)));
+    }
+
+    #[test]
+    fn stepper_advance_loops_back_after_step() {
+        let mut stepper = Stepper::new(Duration::from_secs(1));
+
+        assert!(stepper.advance(Duration::from_millis(1000)));
+        assert!(!stepper.advance(Duration::from_millis(999)));
+        assert!(stepper.advance(Duration::from_millis(1)));
     }
 }

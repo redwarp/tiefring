@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use anyhow::Result;
 use bevy_ecs::prelude::Mut;
 use tiefring::{text::Font, Canvas, CanvasSettings, Color, Graphics, Rect};
@@ -65,7 +63,6 @@ impl Engine {
             .unwrap();
         let mut font = Font::load_font(fonts.join(FONT_NAME)).unwrap();
 
-        let mut time = Instant::now();
         window.set_visible(true);
 
         let _player = spawner::player(&mut game.world, 10, 10);
@@ -100,11 +97,7 @@ impl Engine {
                     canvas.resize(size.width, size.height);
                 }
 
-                let now = Instant::now();
-                let dt = now.duration_since(time);
-                time = now;
-
-                match game.update(dt, Input::from_input_helper(&input_helper)) {
+                match game.update(Input::from_input_helper(&input_helper)) {
                     Update::Refresh => {
                         redraw = true;
                     }
