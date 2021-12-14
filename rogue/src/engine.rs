@@ -10,7 +10,7 @@ use winit::{
 use winit_input_helper::WinitInputHelper;
 
 use crate::{
-    components::{Body, FieldOfView, Player, Position},
+    components::{Body, Position},
     game::{Game, Update},
     inputs::Input,
     map::Map,
@@ -95,17 +95,18 @@ impl Engine {
 
                 if let Some(size) = input_helper.window_resized() {
                     canvas.resize(size.width, size.height);
-                }
-
-                match game.update(Input::from_input_helper(&input_helper)) {
-                    Update::Refresh => {
-                        redraw = true;
-                    }
-                    Update::Exit => {
-                        *control_flow = ControlFlow::Exit;
-                    }
-                    Update::NoOp => {
-                        redraw = false;
+                    redraw = true;
+                } else {
+                    match game.update(Input::from_input_helper(&input_helper)) {
+                        Update::Refresh => {
+                            redraw = true;
+                        }
+                        Update::Exit => {
+                            *control_flow = ControlFlow::Exit;
+                        }
+                        Update::NoOp => {
+                            redraw = false;
+                        }
                     }
                 }
                 window.request_redraw();
@@ -115,7 +116,7 @@ impl Engine {
 }
 
 fn render_game(game: &mut Game, graphics: &mut Graphics, font: &mut Font) {
-    game.world.resource_scope(|world, map: Mut<Map>| {
+    game.world.resource_scope(|_world, map: Mut<Map>| {
         for (j, lines) in map.lines().enumerate() {
             for (i, tile) in lines.iter().enumerate() {
                 if map.is_revealed(i as i32, j as i32) {
@@ -133,23 +134,6 @@ fn render_game(game: &mut Game, graphics: &mut Graphics, font: &mut Font) {
                 }
             }
         }
-
-        let mut query = world.query::<(&FieldOfView, &Player)>();
-        query.for_each(world, |(fov, _)| {
-            for (j, lines) in map.lines().enumerate() {
-                for (i, tile) in lines.iter().enumerate() {
-                    if fov.contains(i as i32, j as i32) {
-                        let rect = Rect::from_xywh(
-                            i as f32 * TILE_SIZE,
-                            j as f32 * TILE_SIZE,
-                            TILE_SIZE,
-                            TILE_SIZE,
-                        );
-                        graphics.draw_rect(rect, tile.color);
-                    }
-                }
-            }
-        });
     });
     let mut query = game.world.query::<(&Body, &Position)>();
     query.for_each(&game.world, |(body, position)| {

@@ -1,5 +1,7 @@
 use tiefring::Color;
 
+pub struct Name(pub String);
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Position {
     pub x: i32,
@@ -38,9 +40,5 @@ impl FieldOfView {
             visible_positions: Vec::new(),
             view_distance,
         }
-    }
-
-    pub fn contains(&self, x: i32, y: i32) -> bool {
-        self.visible_positions.contains(&Position::new(x, y))
     }
 }

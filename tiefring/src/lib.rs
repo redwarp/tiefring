@@ -138,7 +138,7 @@ impl Canvas {
             self.wgpu_context
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Render Encoder"),
+                    label: Some("Redraw Encoder"),
                 });
 
         let surface_texture = self

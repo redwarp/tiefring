@@ -60,7 +60,7 @@ impl Game {
         let rng = StdRng::from_entropy();
         world.insert_resource(rng);
 
-        let run_state = RunState::Paused;
+        let run_state = RunState::Running;
 
         Self {
             world,
@@ -81,7 +81,7 @@ impl Game {
                     Update::Exit
                 } else if self.try_move_player(&input) {
                     self.run_state = RunState::Running;
-                    Update::Refresh
+                    Update::NoOp
                 } else {
                     Update::NoOp
                 }
