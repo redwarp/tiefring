@@ -13,7 +13,7 @@ use winit_input_helper::WinitInputHelper;
 
 use crate::{
     components::{Body, FieldOfView, Player, Position},
-    game::Game,
+    game::{Game, Update},
     inputs::Input,
     map::Map,
     spawner,
@@ -73,15 +73,21 @@ impl Engine {
         spawner::orc(&mut game.world, 5, 12);
         spawner::orc(&mut game.world, 14, 2);
 
+        let mut redraw = true;
+
         event_loop.run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Poll;
 
             if let Event::RedrawRequested(_) = event {
-                canvas
-                    .draw(|graphics| {
-                        render_game(&mut game, graphics, &mut font);
-                    })
-                    .unwrap();
+                if redraw {
+                    canvas
+                        .draw(|graphics| {
+                            render_game(&mut game, graphics, &mut font);
+                        })
+                        .unwrap();
+                } else {
+                    canvas.redraw_last().unwrap();
+                }
             }
 
             if input_helper.update(&event) {
@@ -98,10 +104,17 @@ impl Engine {
                 let dt = now.duration_since(time);
                 time = now;
 
-                if game.update(dt, Input::from_input_helper(&input_helper)) {
-                    *control_flow = ControlFlow::Exit;
+                match game.update(dt, Input::from_input_helper(&input_helper)) {
+                    Update::Refresh => {
+                        redraw = true;
+                    }
+                    Update::Exit => {
+                        *control_flow = ControlFlow::Exit;
+                    }
+                    Update::NoOp => {
+                        redraw = false;
+                    }
                 }
-
                 window.request_redraw();
             }
         });

@@ -132,6 +132,47 @@ impl Canvas {
         Ok(())
     }
 
+    pub fn redraw_last(&mut self) -> Result<(), Error> {
+        self.graphics.reset();
+        let mut encoder: CommandEncoder =
+            self.wgpu_context
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Render Encoder"),
+                });
+
+        let surface_texture = self
+            .wgpu_context
+            .surface
+            .get_current_texture()
+            .map_err(Error::RenderingFailed)?;
+
+        encoder.copy_texture_to_texture(
+            wgpu::ImageCopyTexture {
+                texture: &self.wgpu_context.buffer_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::ImageCopyTexture {
+                texture: &surface_texture.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::Extent3d {
+                width: self.wgpu_context.size.width,
+                height: self.wgpu_context.size.height,
+                depth_or_array_layers: 1,
+            },
+        );
+
+        self.wgpu_context.queue.submit(Some(encoder.finish()));
+        surface_texture.present();
+
+        Ok(())
+    }
+
     pub fn resize(&mut self, width: u32, height: u32) {
         self.wgpu_context.resize(width, height);
         self.camera.resize(

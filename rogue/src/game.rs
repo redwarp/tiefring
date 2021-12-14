@@ -13,10 +13,24 @@ use crate::components::{Player, Position};
 use crate::map::Map;
 use crate::{inputs::Input, systems};
 
+#[derive(PartialEq, Clone, Copy)]
+pub enum RunState {
+    Running,
+    Paused,
+}
+
+#[derive(PartialEq, Clone, Copy)]
+pub enum Update {
+    Refresh,
+    Exit,
+    NoOp,
+}
+
 pub struct Game {
     pub world: World,
     pub schedule: Schedule,
     stepper: Stepper,
+    run_state: RunState,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, StageLabel)]
@@ -48,57 +62,62 @@ impl Game {
         let rng = StdRng::from_entropy();
         world.insert_resource(rng);
 
+        let run_state = RunState::Paused;
+
         Self {
             world,
             schedule,
             stepper,
+            run_state,
         }
     }
 
-    pub fn update(&mut self, dt: Duration, input: Option<Input>) -> bool {
-        self.try_move_player(&input);
-        if self.stepper.advance(dt) {
-            self.schedule.run(&mut self.world);
+    pub fn update(&mut self, dt: Duration, input: Option<Input>) -> Update {
+        match self.run_state {
+            RunState::Running => {
+                self.schedule.run(&mut self.world);
+                self.run_state = RunState::Paused;
+                Update::Refresh
+            }
+            RunState::Paused => {
+                if let Some(Input::Escape) = input {
+                    Update::Exit
+                } else if self.try_move_player(&input) {
+                    self.run_state = RunState::Running;
+                    Update::Refresh
+                } else {
+                    Update::NoOp
+                }
+            }
         }
-
-        matches!(input, Some(Input::Escape))
     }
 
     fn try_move_player(&mut self, input: &Option<Input>) -> bool {
         match input {
-            Some(Input::Up) => {
-                self.move_player(0, -1);
-                true
-            }
-            Some(Input::Down) => {
-                self.move_player(0, 1);
-                true
-            }
-            Some(Input::Left) => {
-                self.move_player(-1, 0);
-                true
-            }
-            Some(Input::Right) => {
-                self.move_player(1, 0);
-                true
-            }
+            Some(Input::Up) => self.move_player(0, -1),
+            Some(Input::Down) => self.move_player(0, 1),
+            Some(Input::Left) => self.move_player(-1, 0),
+            Some(Input::Right) => self.move_player(1, 0),
             _ => false,
         }
     }
 
-    fn move_player(&mut self, dx: i32, dy: i32) {
+    fn move_player(&mut self, dx: i32, dy: i32) -> bool {
+        let mut moved = false;
         self.world.resource_scope(|world, map: Mut<Map>| {
             world
-                .query::<(&Player, &mut Position)>()
-                .for_each_mut(world, |(_, mut position)| {
+                .query_filtered::<&mut Position, With<Player>>()
+                .for_each_mut(world, |mut position| {
                     let x = position.x + dx;
                     let y = position.y + dy;
                     if map.is_walkable(x, y) {
                         position.x = x;
                         position.y = y;
+                        moved = true;
                     }
                 });
         });
+        moved
     }
 }
 
