@@ -1,16 +1,12 @@
-use glam::Mat4;
+use glam::{Mat4, Vec3};
 use wgpu::{util::DeviceExt, BindGroup, BindGroupLayout, Buffer};
 
 use crate::{CanvasZero, WgpuContext};
 
-// We need this for Rust to store our data correctly for the shaders
 #[repr(C)]
-// This is so we can store this in a buffer
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct CameraUniform {
-    // We can't use cgmath with bytemuck directly so we'll have
-    // to convert the Matrix4 into a 4x4 f32 array
-    projection: [f32; 16],
+    matrix: [f32; 16],
 }
 
 impl CameraUniform {}
@@ -26,17 +22,20 @@ impl Camera {
         wgpu_context: &WgpuContext,
         width: u32,
         height: u32,
+        scale: f32,
         canvas_zero: &CanvasZero,
     ) -> Self {
         let camera_uniform = CameraUniform {
-            projection: Camera::projection_matrix(width, height, canvas_zero),
+            matrix: (Camera::projection_matrix(width, height, canvas_zero)
+                * Camera::view_matrix(scale))
+            .to_cols_array(),
         };
 
         let camera_buffer =
             wgpu_context
                 .device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Camera buffer"),
+                    label: Some("Projection matrix buffer"),
                     contents: bytemuck::cast_slice(&[camera_uniform]),
                     usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 });
@@ -80,38 +79,23 @@ impl Camera {
         wgpu_context: &WgpuContext,
         width: u32,
         height: u32,
+        scale: f32,
         canvas_zero: &CanvasZero,
     ) {
         let camera_uniform = CameraUniform {
-            projection: Camera::projection_matrix(width, height, canvas_zero),
+            matrix: (Camera::projection_matrix(width, height, canvas_zero)
+                * Camera::view_matrix(scale))
+            .to_cols_array(),
         };
 
-        let updated_camera_buffer =
-            wgpu_context
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Camera buffer"),
-                    contents: bytemuck::cast_slice(&[camera_uniform]),
-                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_SRC,
-                });
-
-        let mut encoder =
-            wgpu_context
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Update Camera buffer"),
-                });
-        encoder.copy_buffer_to_buffer(
-            &updated_camera_buffer,
-            0,
+        wgpu_context.queue.write_buffer(
             &self.camera_buffer,
             0,
-            std::mem::size_of::<CameraUniform>() as wgpu::BufferAddress,
+            bytemuck::cast_slice(&[camera_uniform]),
         );
-        wgpu_context.queue.submit(Some(encoder.finish()));
     }
 
-    fn projection_matrix(width: u32, height: u32, canvas_zero: &CanvasZero) -> [f32; 16] {
+    fn projection_matrix(width: u32, height: u32, canvas_zero: &CanvasZero) -> Mat4 {
         match canvas_zero {
             CanvasZero::Centered => Mat4::orthographic_rh(
                 (-(width as f32 / 2.0)).floor(),
@@ -120,12 +104,14 @@ impl Camera {
                 (-(height as f32 / 2.0)).floor(),
                 -100.0,
                 100.0,
-            )
-            .to_cols_array(),
+            ),
             CanvasZero::TopLeft => {
                 Mat4::orthographic_rh(0.0, width as f32, height as f32, 0.0, -100.0, 100.0)
-                    .to_cols_array()
             }
         }
+    }
+
+    fn view_matrix(scale: f32) -> Mat4 {
+        Mat4::from_scale(Vec3::new(scale, scale, 1.0))
     }
 }

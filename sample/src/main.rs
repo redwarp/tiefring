@@ -41,6 +41,7 @@ fn main() {
                     b: 0.4,
                     a: 1.0,
                 },
+                scale: 1.0,
                 ..Default::default()
             },
         ))
