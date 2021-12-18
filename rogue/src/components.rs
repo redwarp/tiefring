@@ -27,14 +27,16 @@ impl Body {
 
 pub struct Player;
 
+pub struct Monster;
+
 pub struct RandomMover;
 
-pub struct FieldOfView {
+pub struct Vision {
     pub visible_positions: Vec<Position>,
     pub view_distance: i32,
 }
 
-impl FieldOfView {
+impl Vision {
     pub fn new(view_distance: i32) -> Self {
         Self {
             visible_positions: Vec::new(),

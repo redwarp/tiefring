@@ -14,7 +14,6 @@ use crate::{
     game::{Game, Update},
     inputs::Input,
     map::Map,
-    spawner,
 };
 
 const TILE_SIZE: f32 = 16.0;
@@ -64,11 +63,6 @@ impl Engine {
         let mut font = Font::load_font(fonts.join(FONT_NAME)).unwrap();
 
         window.set_visible(true);
-
-        let _player = spawner::player(&mut game.world, 10, 10);
-        spawner::orc(&mut game.world, 3, 7);
-        spawner::orc(&mut game.world, 5, 12);
-        spawner::orc(&mut game.world, 14, 2);
 
         let mut redraw = true;
 

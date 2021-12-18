@@ -11,6 +11,7 @@ use torchbearer::Map as FovMap;
 
 use crate::components::{Player, Position};
 use crate::map::Map;
+use crate::spawner;
 use crate::{inputs::Input, systems};
 
 #[derive(PartialEq, Clone, Copy)]
@@ -36,6 +37,7 @@ pub struct Game {
 enum Stages {
     Update,
     Map,
+    Monster,
 }
 
 impl Game {
@@ -52,6 +54,11 @@ impl Game {
                 Stages::Update,
                 Stages::Map,
                 SystemStage::parallel().with_system(systems::update_map.system()),
+            )
+            .add_stage_after(
+                Stages::Map,
+                Stages::Monster,
+                SystemStage::parallel().with_system(systems::insult.system()),
             );
 
         let mut world = World::new();
@@ -59,6 +66,16 @@ impl Game {
         world.insert_resource(map);
         let rng = StdRng::from_entropy();
         world.insert_resource(rng);
+
+        let player = spawner::player(&mut world, 10, 10);
+        let player_data = PlayerData {
+            entity: player,
+            position: Position::new(10, 10),
+        };
+        world.insert_resource(player_data);
+        spawner::orc(&mut world, 3, 7);
+        spawner::orc(&mut world, 5, 12);
+        spawner::orc(&mut world, 14, 2);
 
         let run_state = RunState::Running;
 
@@ -100,13 +117,15 @@ impl Game {
     }
 
     fn move_player(&mut self, dx: i32, dy: i32) -> bool {
+        let mut x = 0;
+        let mut y = 0;
         let mut moved = false;
         self.world.resource_scope(|world, map: Mut<Map>| {
             world
                 .query_filtered::<&mut Position, With<Player>>()
                 .for_each_mut(world, |mut position| {
-                    let x = position.x + dx;
-                    let y = position.y + dy;
+                    x = position.x + dx;
+                    y = position.y + dy;
                     if map.is_walkable(x, y) {
                         position.x = x;
                         position.y = y;
@@ -114,8 +133,19 @@ impl Game {
                     }
                 });
         });
+        if moved {
+            if let Some(mut player_data) = self.world.get_resource_mut::<PlayerData>() {
+                player_data.position = Position::new(x, y);
+            }
+        }
+
         moved
     }
+}
+
+pub struct PlayerData {
+    pub position: Position,
+    pub entity: Entity,
 }
 
 #[derive(Debug)]

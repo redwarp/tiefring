@@ -3,7 +3,8 @@ use rand::{prelude::StdRng, Rng};
 use torchbearer::Map as FovMap;
 
 use crate::{
-    components::{FieldOfView, Player, Position, RandomMover},
+    components::{Monster, Name, Player, Position, RandomMover, Vision},
+    game::PlayerData,
     map::Map,
 };
 
@@ -31,10 +32,7 @@ pub fn move_randomly(
     });
 }
 
-pub fn field_of_view(
-    map: Res<Map>,
-    query: Query<(&mut FieldOfView, &Position), Changed<Position>>,
-) {
+pub fn field_of_view(map: Res<Map>, query: Query<(&mut Vision, &Position), Changed<Position>>) {
     query.for_each_mut(|(mut field_of_view, position)| {
         field_of_view.visible_positions = torchbearer::fov::field_of_view(
             &*map,
@@ -47,9 +45,17 @@ pub fn field_of_view(
     });
 }
 
-pub fn update_map(mut map: ResMut<Map>, query: Query<&FieldOfView, With<Player>>) {
+pub fn update_map(mut map: ResMut<Map>, query: Query<&Vision, With<Player>>) {
     map.reset_visible();
     query.for_each(|field_of_view| {
         map.reveal(&field_of_view.visible_positions);
+    });
+}
+
+pub fn insult(player_data: Res<PlayerData>, query: Query<(&Vision, &Name), With<Monster>>) {
+    query.for_each(|(vision, Name(name))| {
+        if vision.visible_positions.contains(&player_data.position) {
+            println!("The {} insults you", name);
+        }
     });
 }
