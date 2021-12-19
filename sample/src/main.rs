@@ -42,7 +42,6 @@ fn main() {
                     a: 1.0,
                 },
                 scale: 1.0,
-                ..Default::default()
             },
         ))
     }

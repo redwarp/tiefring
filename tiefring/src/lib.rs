@@ -45,13 +45,7 @@ impl Canvas {
     {
         let wgpu_context = WgpuContext::new(window, width, height).await?;
         let graphics = Graphics::new();
-        let camera = Camera::new(
-            &wgpu_context,
-            width,
-            height,
-            canvas_settings.scale,
-            &canvas_settings.canvas_zero,
-        );
+        let camera = Camera::new(&wgpu_context, width, height, canvas_settings.scale);
         let color_renderer = ColorRenderer::new(&wgpu_context, &camera);
         let texture_renderer = TextureRenderer::new(&wgpu_context, &camera);
         let text_context = TextContext::new(&wgpu_context);
@@ -186,7 +180,6 @@ impl Canvas {
             width,
             height,
             self.canvas_settings.scale,
-            &self.canvas_settings.canvas_zero,
         );
     }
 
@@ -207,7 +200,6 @@ impl Canvas {
             width,
             height,
             self.canvas_settings.scale,
-            &self.canvas_settings.canvas_zero,
         );
     }
 
@@ -313,7 +305,6 @@ impl Canvas {
 pub struct CanvasSettings {
     pub scale: f32,
     pub background_color: Color,
-    pub canvas_zero: CanvasZero,
 }
 
 impl Default for CanvasSettings {
@@ -326,14 +317,8 @@ impl Default for CanvasSettings {
                 b: 0.0,
                 a: 1.0,
             },
-            canvas_zero: CanvasZero::TopLeft,
         }
     }
-}
-
-pub enum CanvasZero {
-    TopLeft,
-    Centered,
 }
 
 pub struct Graphics {

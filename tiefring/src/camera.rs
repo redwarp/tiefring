@@ -1,7 +1,7 @@
 use glam::{Mat4, Vec3};
 use wgpu::{util::DeviceExt, BindGroup, BindGroupLayout, Buffer};
 
-use crate::{CanvasZero, WgpuContext};
+use crate::WgpuContext;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -18,17 +18,10 @@ pub struct Camera {
 }
 
 impl Camera {
-    pub(crate) fn new(
-        wgpu_context: &WgpuContext,
-        width: u32,
-        height: u32,
-        scale: f32,
-        canvas_zero: &CanvasZero,
-    ) -> Self {
+    pub(crate) fn new(wgpu_context: &WgpuContext, width: u32, height: u32, scale: f32) -> Self {
         let camera_uniform = CameraUniform {
-            matrix: (Camera::projection_matrix(width, height, canvas_zero)
-                * Camera::view_matrix(scale))
-            .to_cols_array(),
+            matrix: (Camera::projection_matrix(width, height) * Camera::view_matrix(scale))
+                .to_cols_array(),
         };
 
         let camera_buffer =
@@ -80,12 +73,10 @@ impl Camera {
         width: u32,
         height: u32,
         scale: f32,
-        canvas_zero: &CanvasZero,
     ) {
         let camera_uniform = CameraUniform {
-            matrix: (Camera::projection_matrix(width, height, canvas_zero)
-                * Camera::view_matrix(scale))
-            .to_cols_array(),
+            matrix: (Camera::projection_matrix(width, height) * Camera::view_matrix(scale))
+                .to_cols_array(),
         };
 
         wgpu_context.queue.write_buffer(
@@ -95,20 +86,8 @@ impl Camera {
         );
     }
 
-    fn projection_matrix(width: u32, height: u32, canvas_zero: &CanvasZero) -> Mat4 {
-        match canvas_zero {
-            CanvasZero::Centered => Mat4::orthographic_rh(
-                (-(width as f32 / 2.0)).floor(),
-                (width as f32 / 2.0).ceil(),
-                (height as f32 / 2.0).ceil(),
-                (-(height as f32 / 2.0)).floor(),
-                -100.0,
-                100.0,
-            ),
-            CanvasZero::TopLeft => {
-                Mat4::orthographic_rh(0.0, width as f32, height as f32, 0.0, -100.0, 100.0)
-            }
-        }
+    fn projection_matrix(width: u32, height: u32) -> Mat4 {
+        Mat4::orthographic_rh(0.0, width as f32, height as f32, 0.0, -100.0, 100.0)
     }
 
     fn view_matrix(scale: f32) -> Mat4 {
