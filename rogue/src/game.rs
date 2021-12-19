@@ -73,9 +73,9 @@ impl Game {
             position: Position::new(10, 10),
         };
         world.insert_resource(player_data);
-        spawner::orc(&mut world, 3, 7);
-        spawner::orc(&mut world, 5, 12);
-        spawner::orc(&mut world, 14, 2);
+        spawner::orc(&mut world, "Arnold", 3, 7);
+        spawner::orc(&mut world, "Betty", 5, 12);
+        spawner::orc(&mut world, "Irma", 14, 2);
 
         let run_state = RunState::Running;
 

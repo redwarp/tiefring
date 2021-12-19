@@ -55,7 +55,7 @@ pub fn update_map(mut map: ResMut<Map>, query: Query<&Vision, With<Player>>) {
 pub fn insult(player_data: Res<PlayerData>, query: Query<(&Vision, &Name), With<Monster>>) {
     query.for_each(|(vision, Name(name))| {
         if vision.visible_positions.contains(&player_data.position) {
-            println!("The {} insults you", name);
+            println!("{} insults you", name);
         }
     });
 }
