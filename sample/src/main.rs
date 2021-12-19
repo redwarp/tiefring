@@ -199,6 +199,14 @@ fn main() {
                 increase_scale(&mut canvas);
             } else if input.key_pressed(VirtualKeyCode::Minus) {
                 decrease_scale(&mut canvas);
+            } else if input.key_pressed(VirtualKeyCode::Up) {
+                translate(&mut canvas, 0.0, -10.0);
+            } else if input.key_pressed(VirtualKeyCode::Down) {
+                translate(&mut canvas, 0.0, 10.0);
+            } else if input.key_pressed(VirtualKeyCode::Left) {
+                translate(&mut canvas, -10.0, 0.0);
+            } else if input.key_pressed(VirtualKeyCode::Right) {
+                translate(&mut canvas, 10.0, 0.0);
             }
 
             if input.key_pressed(VirtualKeyCode::P) {
@@ -222,4 +230,11 @@ fn increase_scale(canvas: &mut Canvas) {
 fn decrease_scale(canvas: &mut Canvas) {
     let scale = (canvas.scale() - 0.1).max(1.0);
     canvas.set_scale(scale);
+}
+
+fn translate(canvas: &mut Canvas, dx: f32, dy: f32) {
+    let mut translation = canvas.translation();
+    translation.left = (translation.left + dx).max(0.0);
+    translation.top = (translation.top + dy).max(0.0);
+    canvas.set_translation(translation);
 }

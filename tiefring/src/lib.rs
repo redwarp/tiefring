@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use camera::Camera;
+use camera::{Camera, CameraSettings};
 use raw_window_handle::HasRawWindowHandle;
 use shape::{ColorRenderer, DrawRectOperation, DrawRectOperations};
 use sprite::{DrawTextureOperation, DrawTextureOperations, Sprite, TextureId, TextureRenderer};
@@ -45,7 +45,15 @@ impl Canvas {
     {
         let wgpu_context = WgpuContext::new(window, width, height).await?;
         let graphics = Graphics::new();
-        let camera = Camera::new(&wgpu_context, width, height, canvas_settings.scale);
+        let camera = Camera::new(
+            &wgpu_context,
+            CameraSettings {
+                scale: canvas_settings.scale,
+                translation: Position::new(0.0, 0.0),
+                width,
+                height,
+            },
+        );
         let color_renderer = ColorRenderer::new(&wgpu_context, &camera);
         let texture_renderer = TextureRenderer::new(&wgpu_context, &camera);
         let text_context = TextContext::new(&wgpu_context);
@@ -175,12 +183,7 @@ impl Canvas {
 
     pub fn resize(&mut self, width: u32, height: u32) {
         self.wgpu_context.resize(width, height);
-        self.camera.resize(
-            &self.wgpu_context,
-            width,
-            height,
-            self.canvas_settings.scale,
-        );
+        self.camera.set_size(&self.wgpu_context, width, height);
     }
 
     pub fn size(&self) -> Size {
@@ -193,14 +196,16 @@ impl Canvas {
 
     pub fn set_scale(&mut self, scale: f32) {
         self.canvas_settings.scale = scale;
-        let Size { width, height } = self.wgpu_context.size;
 
-        self.camera.resize(
-            &self.wgpu_context,
-            width,
-            height,
-            self.canvas_settings.scale,
-        );
+        self.camera.set_scale(&self.wgpu_context, scale);
+    }
+
+    pub fn translation(&self) -> Position {
+        self.camera.camera_settings.translation
+    }
+
+    pub fn set_translation(&mut self, translation: Position) {
+        self.camera.set_translation(&self.wgpu_context, translation)
     }
 
     pub async fn screenshot<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
@@ -523,7 +528,7 @@ impl std::ops::Mul<f32> for &Rect {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Position {
     pub left: f32,
     pub top: f32,
