@@ -196,6 +196,10 @@ fn main() {
             if input.key_pressed(VirtualKeyCode::Escape) || input.quit() {
                 *control_flow = ControlFlow::Exit;
                 return;
+            } else if input.key_pressed(VirtualKeyCode::Plus) {
+                increase_scale(&mut canvas);
+            } else if input.key_pressed(VirtualKeyCode::Minus) {
+                decrease_scale(&mut canvas);
             }
 
             if input.key_pressed(VirtualKeyCode::P) {
@@ -209,4 +213,14 @@ fn main() {
             window.request_redraw();
         }
     });
+}
+
+fn increase_scale(canvas: &mut Canvas) {
+    let scale = (canvas.scale() + 0.1).min(2.0);
+    canvas.set_scale(scale);
+}
+
+fn decrease_scale(canvas: &mut Canvas) {
+    let scale = (canvas.scale() - 0.1).max(1.0);
+    canvas.set_scale(scale);
 }

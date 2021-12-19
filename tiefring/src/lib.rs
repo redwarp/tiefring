@@ -190,6 +190,27 @@ impl Canvas {
         );
     }
 
+    pub fn size(&self) -> Size {
+        self.wgpu_context.size
+    }
+
+    pub fn scale(&self) -> f32 {
+        self.canvas_settings.scale
+    }
+
+    pub fn set_scale(&mut self, scale: f32) {
+        self.canvas_settings.scale = scale;
+        let Size { width, height } = self.wgpu_context.size;
+
+        self.camera.resize(
+            &self.wgpu_context,
+            width,
+            height,
+            self.canvas_settings.scale,
+            &self.canvas_settings.canvas_zero,
+        );
+    }
+
     pub async fn screenshot<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
         let mut encoder: CommandEncoder =
             self.wgpu_context
