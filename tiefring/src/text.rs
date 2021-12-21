@@ -488,7 +488,10 @@ impl TextRenderer {
             .get_or_create_texture(wgpu_context, text_context);
 
         for operation in draw_text_operations.operations.iter() {
-            let Position { mut left, mut top } = operation.position;
+            let Position {
+                x: mut left,
+                y: mut top,
+            } = operation.position;
             let mut font_for_px = operation.font_for_px.borrow_mut();
             let ascent = font_for_px.horizontal_line_metrics.ascent;
             let new_line_size = font_for_px.horizontal_line_metrics.new_line_size;
@@ -504,7 +507,7 @@ impl TextRenderer {
                         left += character.metrics.advance_width.round();
                     }
                     CharType::LineBreak => {
-                        left = operation.position.left;
+                        left = operation.position.x;
                         top += new_line_size;
                     }
                     CharType::Regular => {

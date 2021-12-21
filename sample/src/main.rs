@@ -65,6 +65,7 @@ fn main() {
     let mut vt323_regular = Font::load_font(fonts.join("VT323-Regular.ttf")).unwrap();
 
     window.set_visible(true);
+    let mut translation = Position::new(0.0, 0.0);
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -72,121 +73,93 @@ fn main() {
         if let Event::RedrawRequested(_) = event {
             canvas
                 .draw(|graphics| {
-                    graphics.draw_rect(
-                        [0, 0, 100, 100],
-                        Color {
-                            r: 1.0,
-                            g: 1.0,
-                            b: 0.0,
-                            a: 1.0,
-                        },
-                    );
-                    graphics.draw_rect(
-                        [50, 50, 150, 150],
-                        Color {
-                            r: 1.0,
-                            g: 0.0,
-                            b: 0.0,
-                            a: 0.5,
-                        },
-                    );
-                    graphics.draw_sprite(
-                        &alien_1,
-                        Position {
-                            left: 10.0,
-                            top: 100.0,
-                        },
-                    );
-                    graphics.draw_sprite(
-                        &alien_2,
-                        Position {
-                            left: 77.0,
-                            top: 100.0,
-                        },
-                    );
-                    graphics.draw_sprite(
-                        &alien_3,
-                        Position {
-                            left: 144.0,
-                            top: 100.0,
-                        },
-                    );
-                    graphics.draw_rect(
-                        [0, 160, 240, 360],
-                        Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
-                        },
-                    );
-                    graphics.draw_sprite_in_rect(&alien_1, [211, 100, 345, 288]);
-                    graphics.draw_sprite(
-                        &alien_1,
-                        Position {
-                            left: 150.0,
-                            top: 200.0,
-                        },
-                    );
+                    graphics.with_translate(translation, |graphics| {
+                        graphics.draw_rect(
+                            [0, 0, 100, 100],
+                            Color {
+                                r: 1.0,
+                                g: 1.0,
+                                b: 0.0,
+                                a: 1.0,
+                            },
+                        );
+                        graphics.draw_rect(
+                            [50, 50, 150, 150],
+                            Color {
+                                r: 1.0,
+                                g: 0.0,
+                                b: 0.0,
+                                a: 0.5,
+                            },
+                        );
+                        graphics.draw_sprite(&alien_1, Position { x: 10.0, y: 100.0 });
+                        graphics.draw_sprite(&alien_2, Position { x: 77.0, y: 100.0 });
+                        graphics.draw_sprite(&alien_3, Position { x: 144.0, y: 100.0 });
+                        graphics.draw_rect(
+                            [0, 160, 240, 360],
+                            Color {
+                                r: 0.1,
+                                g: 0.2,
+                                b: 0.3,
+                                a: 1.0,
+                            },
+                        );
+                        graphics.draw_sprite_in_rect(&alien_1, [211, 100, 345, 288]);
+                        graphics.draw_sprite(&alien_1, Position { x: 150.0, y: 200.0 });
 
-                    let (x, y) = tile_set.tile_count();
-                    for i in 0..x {
-                        for j in 0..y {
-                            let sprite = tile_set.sprite(i, j);
-                            graphics.draw_sprite(
-                                &sprite,
-                                Position {
-                                    left: i as f32 * 16.0 + 300.0,
-                                    top: j as f32 * 16.0,
-                                },
-                            )
+                        let (x, y) = tile_set.tile_count();
+                        for i in 0..x {
+                            for j in 0..y {
+                                let sprite = tile_set.sprite(i, j);
+                                graphics.draw_sprite(
+                                    &sprite,
+                                    Position {
+                                        x: i as f32 * 16.0 + 300.0,
+                                        y: j as f32 * 16.0,
+                                    },
+                                )
+                            }
                         }
-                    }
 
-                    graphics.draw_sprite(
-                        &alien_1,
-                        Position {
-                            left: 350.0,
-                            top: 0.0,
-                        },
-                    );
+                        graphics.draw_sprite(&alien_1, Position { x: 350.0, y: 0.0 });
 
-                    graphics.draw_text(
-                        &mut roboto_regular,
-                        "Wehp this is some text it seems!\n(With some line break, too.)",
-                        32,
-                        Position::new(0.0, 0.0),
-                        Color {
-                            r: 1.0,
-                            g: 0.0,
-                            b: 0.0,
-                            a: 1.0,
-                        },
-                    );
-                    graphics.draw_text(
-                        &mut roboto_regular,
-                        "And even more text!",
-                        32,
-                        Position::new(50.0, 200.0),
-                        Color {
-                            r: 0.0,
-                            g: 0.0,
-                            b: 0.0,
-                            a: 0.5,
-                        },
-                    );
-                    graphics.draw_text(
-                        &mut vt323_regular,
-                        "Let's see how monospace\nfonts behave.\nPretty good it seems!ç",
-                        20,
-                        Position::new(20.0, 300.0),
-                        Color {
-                            r: 2.0,
-                            g: 2.0,
-                            b: 2.0,
-                            a: 0.75,
-                        },
-                    )
+                        graphics.draw_text(
+                            &mut roboto_regular,
+                            "Wehp this is some text it seems!\n(With some line break, too.)",
+                            32,
+                            Position::new(0.0, 0.0),
+                            Color {
+                                r: 1.0,
+                                g: 0.0,
+                                b: 0.0,
+                                a: 1.0,
+                            },
+                        );
+                        graphics.draw_text(
+                            &mut roboto_regular,
+                            "And even more text!",
+                            32,
+                            Position::new(50.0, 200.0),
+                            Color {
+                                r: 0.0,
+                                g: 0.0,
+                                b: 0.0,
+                                a: 0.5,
+                            },
+                        );
+                        graphics.draw_text(
+                            &mut vt323_regular,
+                            "Let's see how monospace\nfonts behave.\nPretty good it seems!ç",
+                            20,
+                            Position::new(20.0, 300.0),
+                            Color {
+                                r: 2.0,
+                                g: 2.0,
+                                b: 2.0,
+                                a: 0.75,
+                            },
+                        )
+                    });
                 })
                 .unwrap();
         }
@@ -200,13 +173,13 @@ fn main() {
             } else if input.key_pressed(VirtualKeyCode::Minus) {
                 decrease_scale(&mut canvas);
             } else if input.key_pressed(VirtualKeyCode::Up) {
-                translate(&mut canvas, 0.0, -10.0);
+                translate(0.0, -10.0, &mut translation);
             } else if input.key_pressed(VirtualKeyCode::Down) {
-                translate(&mut canvas, 0.0, 10.0);
+                translate(0.0, 10.0, &mut translation);
             } else if input.key_pressed(VirtualKeyCode::Left) {
-                translate(&mut canvas, -10.0, 0.0);
+                translate(-10.0, 0.0, &mut translation);
             } else if input.key_pressed(VirtualKeyCode::Right) {
-                translate(&mut canvas, 10.0, 0.0);
+                translate(10.0, 0.0, &mut translation);
             }
 
             if input.key_pressed(VirtualKeyCode::P) {
@@ -214,7 +187,7 @@ fn main() {
             }
 
             if let Some(size) = input.window_resized() {
-                canvas.resize(size.width, size.height);
+                canvas.set_size(size.width, size.height);
             }
 
             window.request_redraw();
@@ -232,9 +205,7 @@ fn decrease_scale(canvas: &mut Canvas) {
     canvas.set_scale(scale);
 }
 
-fn translate(canvas: &mut Canvas, dx: f32, dy: f32) {
-    let mut translation = canvas.translation();
-    translation.left = (translation.left + dx).max(0.0);
-    translation.top = (translation.top + dy).max(0.0);
-    canvas.set_translation(translation);
+fn translate(dx: f32, dy: f32, translation: &mut Position) {
+    translation.x = (translation.x + dx).max(0.0);
+    translation.y = (translation.y + dy).max(0.0);
 }

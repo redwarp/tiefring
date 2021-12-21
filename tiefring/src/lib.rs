@@ -44,7 +44,7 @@ impl Canvas {
         W: HasRawWindowHandle,
     {
         let wgpu_context = WgpuContext::new(window, width, height).await?;
-        let graphics = Graphics::new();
+        let graphics = Graphics::new(width, height);
         let camera = Camera::new(
             &wgpu_context,
             CameraSettings {
@@ -181,7 +181,8 @@ impl Canvas {
         Ok(())
     }
 
-    pub fn resize(&mut self, width: u32, height: u32) {
+    pub fn set_size(&mut self, width: u32, height: u32) {
+        self.graphics.size = Size { width, height };
         self.wgpu_context.resize(width, height);
         self.camera.set_size(&self.wgpu_context, width, height);
     }
@@ -329,6 +330,8 @@ impl Default for CanvasSettings {
 pub struct Graphics {
     current_operation_block: Option<OperationBlock>,
     operation_blocks: Vec<OperationBlock>,
+    size: Size,
+    translation: Option<Position>,
 }
 
 struct OperationBlock {
@@ -368,31 +371,42 @@ impl OperationBlock {
 }
 
 impl Graphics {
-    fn new() -> Self {
+    fn new(width: u32, height: u32) -> Self {
         Graphics {
             current_operation_block: None,
             operation_blocks: Vec::new(),
+            size: Size { width, height },
+            translation: None,
         }
     }
 
     pub fn draw_rect<R: Into<Rect>>(&mut self, rect: R, color: Color) {
+        let destination = if let Some(translation) = self.translation {
+            rect.into().translated(translation.x, translation.y)
+        } else {
+            rect.into()
+        };
         self.get_operation_block(DrawOperationType::Rect)
-            .push_draw_rect_operation(DrawRectOperation(rect.into(), color));
+            .push_draw_rect_operation(DrawRectOperation(destination, color));
     }
 
     pub fn draw_sprite(&mut self, sprite: &Sprite, position: Position) {
         let destination = Rect {
-            left: position.left,
-            top: position.top,
-            right: position.left + sprite.dimensions.width as f32,
-            bottom: position.top + sprite.dimensions.height as f32,
+            left: position.x,
+            top: position.y,
+            right: position.x + sprite.dimensions.width as f32,
+            bottom: position.y + sprite.dimensions.height as f32,
         };
         self.draw_sprite_in_rect(sprite, destination);
     }
 
     pub fn draw_sprite_in_rect<R: Into<Rect>>(&mut self, sprite: &Sprite, rect: R) {
         let tex_coords = sprite.tex_coords;
-        let destination = rect.into();
+        let destination = if let Some(translation) = self.translation {
+            rect.into().translated(translation.x, translation.y)
+        } else {
+            rect.into()
+        };
         let texture = sprite.texture.clone();
         self.get_operation_block(DrawOperationType::Texture(sprite.texture.id))
             .push_draw_texture_operation(DrawTextureOperation {
@@ -410,6 +424,11 @@ impl Graphics {
         position: Position,
         color: Color,
     ) {
+        let position = if let Some(translation) = self.translation {
+            position.translated(translation.x, translation.y)
+        } else {
+            position
+        };
         let text: String = text.into();
         let font_for_px = font.get_font_for_px(px);
         self.get_operation_block(DrawOperationType::Text(FontId(font.font.file_hash(), px)))
@@ -419,6 +438,19 @@ impl Graphics {
                 text,
                 color,
             });
+    }
+
+    pub fn with_translate<F>(&mut self, translation: Position, function: F)
+    where
+        F: FnOnce(&mut Self),
+    {
+        self.translation = Some(translation);
+        function(self);
+        self.translation = None;
+    }
+
+    pub fn size(&self) -> Size {
+        self.size
     }
 
     fn reset(&mut self) {
@@ -491,6 +523,15 @@ impl Rect {
     pub fn height(&self) -> f32 {
         self.bottom - self.top
     }
+
+    pub fn translated(&self, x: f32, y: f32) -> Self {
+        Self {
+            left: self.left + x,
+            top: self.top + y,
+            right: self.right + x,
+            bottom: self.bottom + y,
+        }
+    }
 }
 
 impl From<[i32; 4]> for Rect {
@@ -507,10 +548,10 @@ impl From<[i32; 4]> for Rect {
 impl From<(Position, Size)> for Rect {
     fn from((position, size): (Position, Size)) -> Self {
         Rect {
-            left: position.left,
-            top: position.top,
-            right: position.left + size.width as f32,
-            bottom: position.top + size.height as f32,
+            left: position.x,
+            top: position.y,
+            right: position.x + size.width as f32,
+            bottom: position.y + size.height as f32,
         }
     }
 }
@@ -530,19 +571,19 @@ impl std::ops::Mul<f32> for &Rect {
 
 #[derive(Clone, Copy, Debug)]
 pub struct Position {
-    pub left: f32,
-    pub top: f32,
+    pub x: f32,
+    pub y: f32,
 }
 
 impl Position {
     pub fn new(left: f32, top: f32) -> Self {
-        Self { left, top }
+        Self { x: left, y: top }
     }
 
     pub fn translated(&self, x: f32, y: f32) -> Self {
         Self {
-            left: self.left + x,
-            top: self.top + y,
+            x: self.x + x,
+            y: self.y + y,
         }
     }
 }

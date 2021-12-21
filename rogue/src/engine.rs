@@ -41,7 +41,7 @@ impl Engine {
             WindowBuilder::new()
                 .with_title("Rogue")
                 .with_inner_size(size)
-                .with_resizable(false)
+                .with_resizable(true)
                 .with_visible(false)
                 .build(&event_loop)
                 .unwrap()
@@ -65,24 +65,12 @@ impl Engine {
         window.set_visible(true);
 
         let mut redraw = true;
-        let (mut dx, mut dy) = (0, 0);
 
         event_loop.run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Poll;
 
             if let Event::RedrawRequested(_) = event {
                 if redraw {
-                    let (updated_dx, updated_dy) =
-                        Engine::calculate_translation(&game, &mut canvas);
-                    if dx != updated_dx || dy != updated_dy {
-                        dx = updated_dx;
-                        dy = updated_dy;
-                        canvas.set_translation(tiefring::Position {
-                            left: dx as f32 * TILE_SIZE,
-                            top: dy as f32 * TILE_SIZE,
-                        });
-                    }
-
                     canvas
                         .draw(|graphics| {
                             render_game(&mut game, graphics, &mut font);
@@ -100,7 +88,7 @@ impl Engine {
                 }
 
                 if let Some(size) = input_helper.window_resized() {
-                    canvas.resize(size.width, size.height);
+                    canvas.set_size(size.width, size.height);
 
                     redraw = true;
                 } else {
@@ -126,7 +114,7 @@ impl Engine {
         });
     }
 
-    fn calculate_translation(game: &Game, canvas: &mut Canvas) -> (i32, i32) {
+    fn calculate_translation(game: &Game, graphics: &Graphics) -> (i32, i32) {
         let map = game.world.get_resource::<Map>().unwrap();
         let map_width = map.width;
         let map_height = map.height;
@@ -139,7 +127,7 @@ impl Engine {
         let Size {
             width: canvas_width,
             height: canvas_height,
-        } = canvas.size();
+        } = graphics.size();
         let canvas_width = canvas_width as i32 / TILE_SIZE as i32;
         let canvas_height = canvas_height as i32 / TILE_SIZE as i32;
 
@@ -162,28 +150,34 @@ impl Engine {
 }
 
 fn render_game(game: &mut Game, graphics: &mut Graphics, font: &mut Font) {
-    game.world.resource_scope(|_world, map: Mut<Map>| {
-        for (j, lines) in map.lines().enumerate() {
-            for (i, tile) in lines.iter().enumerate() {
-                if map.is_revealed(i as i32, j as i32) {
-                    let rect = Rect::from_xywh(
-                        i as f32 * TILE_SIZE,
-                        j as f32 * TILE_SIZE,
-                        TILE_SIZE,
-                        TILE_SIZE,
-                    );
-                    graphics.draw_rect(rect, tile.color);
+    let (dx, dy) = Engine::calculate_translation(game, graphics);
+    let dx = dx as f32 * TILE_SIZE;
+    let dy = dy as f32 * TILE_SIZE;
 
-                    if !map.is_visible(i as i32, j as i32) {
-                        graphics.draw_rect(rect, Color::rgba(0.0, 0.0, 0.0, 0.5));
+    graphics.with_translate(tiefring::Position { x: dx, y: dy }, |graphics| {
+        game.world.resource_scope(|_world, map: Mut<Map>| {
+            for (j, lines) in map.lines().enumerate() {
+                for (i, tile) in lines.iter().enumerate() {
+                    if map.is_revealed(i as i32, j as i32) {
+                        let rect = Rect::from_xywh(
+                            i as f32 * TILE_SIZE,
+                            j as f32 * TILE_SIZE,
+                            TILE_SIZE,
+                            TILE_SIZE,
+                        );
+                        graphics.draw_rect(rect, tile.color);
+
+                        if !map.is_visible(i as i32, j as i32) {
+                            graphics.draw_rect(rect, Color::rgba(0.0, 0.0, 0.0, 0.5));
+                        }
                     }
                 }
             }
-        }
-    });
-    let mut query = game.world.query::<(&Body, &Position)>();
-    query.for_each(&game.world, |(body, position)| {
-        body.render(graphics, position, font);
+        });
+        let mut query = game.world.query::<(&Body, &Position)>();
+        query.for_each(&game.world, |(body, position)| {
+            body.render(graphics, position, font);
+        });
     });
 }
 
