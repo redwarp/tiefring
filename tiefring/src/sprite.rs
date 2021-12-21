@@ -4,7 +4,7 @@ use wgpu::{
     util::DeviceExt, BindGroup, BindGroupLayout, Buffer, RenderPass, RenderPipeline, Sampler,
 };
 
-use crate::{camera::Camera, Canvas, Rect, Size, WgpuContext};
+use crate::{camera::Camera, Canvas, Rect, SizeInPx, WgpuContext};
 
 pub(crate) struct DrawTextureOperation {
     pub tex_coords: Rect,
@@ -26,7 +26,7 @@ impl DrawTextureOperations {
     }
 }
 pub struct Sprite {
-    pub dimensions: Size,
+    pub dimensions: SizeInPx,
     pub(crate) tex_coords: Rect,
     pub(crate) texture: Rc<Texture>,
 }
@@ -34,7 +34,7 @@ pub struct Sprite {
 impl Sprite {
     pub fn load_data<S>(canvas: &mut Canvas, rgba: &[u8], dimensions: S) -> Self
     where
-        S: Into<Size> + Copy,
+        S: Into<SizeInPx> + Copy,
     {
         let texture = Rc::new(Texture::new(
             &canvas.wgpu_context,
@@ -69,8 +69,8 @@ impl Sprite {
 }
 
 pub struct TileSet {
-    pub(crate) dimensions: Size,
-    pub(crate) tile_dimensions: Size,
+    pub(crate) dimensions: SizeInPx,
+    pub(crate) tile_dimensions: SizeInPx,
     texture: Rc<Texture>,
 }
 
@@ -82,8 +82,8 @@ impl TileSet {
         tile_dimensions: TS,
     ) -> Self
     where
-        S: Into<Size> + Copy,
-        TS: Into<Size> + Copy,
+        S: Into<SizeInPx> + Copy,
+        TS: Into<SizeInPx> + Copy,
     {
         let texture = Rc::new(Texture::new(
             &canvas.wgpu_context,
@@ -102,7 +102,7 @@ impl TileSet {
     pub fn load_image<P, S>(canvas: &mut Canvas, path: P, tile_dimensions: S) -> Option<Self>
     where
         P: AsRef<Path>,
-        S: Into<Size> + Copy,
+        S: Into<SizeInPx> + Copy,
     {
         let image = image::open(path).ok()?;
 
@@ -142,9 +142,10 @@ impl TileSet {
     }
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, Debug)]
 pub(crate) struct TextureId(pub(crate) usize);
 
+#[derive(Debug)]
 pub(crate) struct Texture {
     pub id: TextureId,
     pub texture: wgpu::Texture,
@@ -158,7 +159,7 @@ impl Texture {
         wgpu_context: &WgpuContext,
         texture_renderer: &TextureRenderer,
         rgba: &[u8],
-        dimensions: Size,
+        dimensions: SizeInPx,
     ) -> Self {
         let id = TEXTURE_INDEX.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let texture_size = wgpu::Extent3d {

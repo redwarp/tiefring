@@ -1,6 +1,6 @@
 use anyhow::Result;
 use bevy_ecs::prelude::Mut;
-use tiefring::{text::Font, Canvas, CanvasSettings, Color, Graphics, Rect, Size};
+use tiefring::{text::Font, Canvas, CanvasSettings, Color, Graphics, Rect, SizeInPx};
 use winit::{
     dpi::LogicalSize,
     event::{Event, VirtualKeyCode},
@@ -124,7 +124,7 @@ impl Engine {
         let player_x = position.x;
         let player_y = position.y;
 
-        let Size {
+        let SizeInPx {
             width: canvas_width,
             height: canvas_height,
         } = graphics.size();
@@ -154,7 +154,7 @@ fn render_game(game: &mut Game, graphics: &mut Graphics, font: &mut Font) {
     let dx = dx as f32 * TILE_SIZE;
     let dy = dy as f32 * TILE_SIZE;
 
-    graphics.with_translate(tiefring::Position { x: dx, y: dy }, |graphics| {
+    graphics.with_translation(tiefring::Position { x: dx, y: dy }, |graphics| {
         game.world.resource_scope(|_world, map: Mut<Map>| {
             for (j, lines) in map.lines().enumerate() {
                 for (i, tile) in lines.iter().enumerate() {

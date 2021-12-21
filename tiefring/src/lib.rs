@@ -182,12 +182,12 @@ impl Canvas {
     }
 
     pub fn set_size(&mut self, width: u32, height: u32) {
-        self.graphics.size = Size { width, height };
+        self.graphics.size = SizeInPx { width, height };
         self.wgpu_context.resize(width, height);
         self.camera.set_size(&self.wgpu_context, width, height);
     }
 
-    pub fn size(&self) -> Size {
+    pub fn size(&self) -> SizeInPx {
         self.wgpu_context.size
     }
 
@@ -230,7 +230,7 @@ impl Canvas {
 
         let texture = &self.wgpu_context.buffer_texture;
 
-        let Size { width, height } = self.wgpu_context.size;
+        let SizeInPx { width, height } = self.wgpu_context.size;
 
         let copy_size = wgpu::Extent3d {
             width,
@@ -330,7 +330,7 @@ impl Default for CanvasSettings {
 pub struct Graphics {
     current_operation_block: Option<OperationBlock>,
     operation_blocks: Vec<OperationBlock>,
-    size: Size,
+    size: SizeInPx,
     translation: Option<Position>,
 }
 
@@ -375,7 +375,7 @@ impl Graphics {
         Graphics {
             current_operation_block: None,
             operation_blocks: Vec::new(),
-            size: Size { width, height },
+            size: SizeInPx { width, height },
             translation: None,
         }
     }
@@ -440,7 +440,7 @@ impl Graphics {
             });
     }
 
-    pub fn with_translate<F>(&mut self, translation: Position, function: F)
+    pub fn with_translation<F>(&mut self, translation: Position, function: F)
     where
         F: FnOnce(&mut Self),
     {
@@ -449,7 +449,7 @@ impl Graphics {
         self.translation = None;
     }
 
-    pub fn size(&self) -> Size {
+    pub fn size(&self) -> SizeInPx {
         self.size
     }
 
@@ -473,7 +473,7 @@ impl Graphics {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 enum DrawOperationType {
     Rect,
     Texture(TextureId),
@@ -545,17 +545,6 @@ impl From<[i32; 4]> for Rect {
     }
 }
 
-impl From<(Position, Size)> for Rect {
-    fn from((position, size): (Position, Size)) -> Self {
-        Rect {
-            left: position.x,
-            top: position.y,
-            right: position.x + size.width as f32,
-            bottom: position.y + size.height as f32,
-        }
-    }
-}
-
 impl std::ops::Mul<f32> for &Rect {
     type Output = Rect;
 
@@ -588,19 +577,19 @@ impl Position {
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct Size {
+#[derive(Clone, Copy, Debug)]
+pub struct SizeInPx {
     pub width: u32,
     pub height: u32,
 }
 
-impl Size {
+impl SizeInPx {
     pub fn new(width: u32, height: u32) -> Self {
         Self { width, height }
     }
 }
 
-impl From<(u32, u32)> for Size {
+impl From<(u32, u32)> for SizeInPx {
     fn from(size: (u32, u32)) -> Self {
         Self {
             width: size.0,
@@ -642,12 +631,13 @@ impl Color {
     }
 }
 
+#[derive(Debug)]
 struct WgpuContext {
     surface: wgpu::Surface,
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
-    size: Size,
+    size: SizeInPx,
     buffer_texture: wgpu::Texture,
 }
 
@@ -688,7 +678,7 @@ impl WgpuContext {
         };
         surface.configure(&device, &config);
 
-        let size = Size { width, height };
+        let size = SizeInPx { width, height };
 
         let buffer_texture = device.create_texture(&wgpu::TextureDescriptor {
             size: wgpu::Extent3d {
@@ -715,7 +705,7 @@ impl WgpuContext {
     }
 
     fn resize(&mut self, width: u32, height: u32) {
-        self.size = Size { width, height };
+        self.size = SizeInPx { width, height };
         self.config.width = width;
         self.config.height = height;
         self.surface.configure(&self.device, &self.config);

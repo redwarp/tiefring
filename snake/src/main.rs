@@ -9,7 +9,7 @@ use rand::Rng;
 use tiefring::{
     sprite::{Sprite, TileSet},
     text::Font,
-    Canvas, CanvasSettings, Color, Graphics, Rect, Size,
+    Canvas, CanvasSettings, Color, Graphics, Rect, SizeInPx,
 };
 use winit::{
     dpi::LogicalSize,
@@ -304,7 +304,7 @@ impl Sprites {
             grass: TileSet::load_image(
                 canvas,
                 sprites.join("grass.png"),
-                Size::new(GRID_STEP as u32, GRID_STEP as u32),
+                SizeInPx::new(GRID_STEP as u32, GRID_STEP as u32),
             )
             .unwrap(),
             font: Font::load_font(fonts.join("VT323-Regular.ttf")).unwrap(),

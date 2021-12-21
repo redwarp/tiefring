@@ -19,6 +19,7 @@ pub(crate) struct DrawTextOperation {
     pub text: String,
     pub color: Color,
 }
+
 pub(crate) struct DrawTextOperations {
     pub operations: Vec<DrawTextOperation>,
     buffers: Option<(Rc<Texture>, Buffer, Buffer)>,
@@ -33,7 +34,7 @@ impl DrawTextOperations {
     }
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, Debug)]
 pub(crate) struct FontId(pub(crate) usize, pub(crate) u32);
 
 pub struct Font {

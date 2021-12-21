@@ -73,7 +73,7 @@ fn main() {
         if let Event::RedrawRequested(_) = event {
             canvas
                 .draw(|graphics| {
-                    graphics.with_translate(translation, |graphics| {
+                    graphics.with_translation(translation, |graphics| {
                         graphics.draw_rect(
                             [0, 0, 100, 100],
                             Color {
