@@ -42,10 +42,6 @@ pub struct Map {
 }
 
 impl Map {
-    pub fn lines(&self) -> std::slice::Chunks<Tile> {
-        self.tiles.chunks(self.width as usize)
-    }
-
     pub fn reset_visible(&mut self) {
         for tile in self.visible_tiles.iter_mut() {
             *tile = false;
@@ -103,17 +99,17 @@ impl Map {
             let y = rng.gen_range(0..height - room_height);
             let new_room = Room::new(x, y, room_width, room_height);
 
-            if !rooms.iter().any(|room| new_room.overlaps(&room)) {
+            if !rooms.iter().any(|room| new_room.overlaps(room)) {
                 rooms.push(new_room);
             }
         }
 
-        for (index, new_room) in rooms.iter().enumerate() {
-            apply_room(&new_room, &mut map);
+        for (index, room) in rooms.iter().enumerate() {
+            apply_room(room, &mut map);
 
-            let (new_x, new_y) = new_room.center();
+            let (new_x, new_y) = room.center();
             if index == 0 {
-                println!("Room 0: {:?} # {:?}", new_room, new_room.center());
+                println!("Room 0: {:?} # {:?}", room, room.center());
                 map.starting_position.x = new_x;
                 map.starting_position.y = new_y;
             } else {
@@ -132,6 +128,10 @@ impl Map {
         spawn_monsters(&rooms, &mut rng, world);
 
         map
+    }
+
+    pub fn tile_at_position(&self, x: i32, y: i32) -> Option<&Tile> {
+        self.tiles.get(index_with_width(self.width, x, y))
     }
 
     fn index(&self, x: i32, y: i32) -> usize {
