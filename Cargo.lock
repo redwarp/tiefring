@@ -1608,9 +1608,9 @@ dependencies = [
 
 [[package]]
 name = "torchbearer"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35b29fbae409c14f7856ded3d96f97668abccd3c757eab2401e4071da40e4ab3"
+checksum = "cb3799a1006107400382809e2ce7ce7576488099f5e90767ff904f4a5eec8bdd"
 
 [[package]]
 name = "tracing"

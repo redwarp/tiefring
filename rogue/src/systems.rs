@@ -1,6 +1,6 @@
 use bevy_ecs::prelude::{Changed, Query, Res, ResMut, With};
 use rand::{prelude::StdRng, Rng};
-use torchbearer::Map as FovMap;
+use torchbearer::path::PathMap;
 
 use crate::{
     components::{Monster, MoveClose, MoveRandom, Name, Player, Position, Vision},

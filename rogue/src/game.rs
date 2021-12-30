@@ -7,7 +7,7 @@ use bevy_ecs::{
 };
 use rand::prelude::StdRng;
 use rand::SeedableRng;
-use torchbearer::Map as FovMap;
+use torchbearer::path::PathMap;
 
 use crate::components::{Player, Position};
 use crate::map::Map;
@@ -68,21 +68,24 @@ impl Game {
             );
 
         let mut world = World::new();
-        let map = Map::empty(width, height).surround().random_walls();
+        let map = Map::dungeon(width, height, &mut world);
+
+        // let map = Map::empty(width, height)
+        //     .surround()
+        //     .random_walls()
+        //     .random_monsters(&mut world);
+
+        let starting_position = map.starting_position;
         world.insert_resource(map);
         let rng = StdRng::from_entropy();
         world.insert_resource(rng);
 
-        let player = spawner::player(&mut world, 10, 10);
+        let player = spawner::player(&mut world, starting_position.x, starting_position.y);
         let player_data = PlayerData {
             entity: player,
-            position: Position::new(10, 10),
+            position: starting_position,
         };
         world.insert_resource(player_data);
-        spawner::orc(&mut world, "Arnold", 3, 7);
-        spawner::orc(&mut world, "Betty", 5, 12);
-        spawner::orc(&mut world, "Irma", 14, 2);
-        spawner::deer(&mut world, 5, 5);
 
         let run_state = RunState::Running;
 
