@@ -98,7 +98,7 @@ impl ColorRenderer {
                         // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
                         polygon_mode: wgpu::PolygonMode::Fill,
                         // Requires Features::DEPTH_CLAMPING
-                        clamp_depth: false,
+                        unclipped_depth: false,
                         // Requires Features::CONSERVATIVE_RASTERIZATION
                         conservative: false,
                     },
@@ -108,6 +108,7 @@ impl ColorRenderer {
                         mask: !0,                         // 3.
                         alpha_to_coverage_enabled: false, // 4.
                     },
+                    multiview: None,
                 });
 
         ColorRenderer { render_pipeline }

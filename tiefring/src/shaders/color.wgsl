@@ -1,6 +1,5 @@
 // Vertex shader
 
-[[block]] // 1.
 struct CameraUniform {
     matrix: mat4x4<f32>;
 };

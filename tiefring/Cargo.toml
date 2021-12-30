@@ -7,7 +7,7 @@ edition = "2021"
 [dependencies]
 bytemuck = { version = "1.7", features = ["derive"] }
 raw-window-handle = "0.4"
-wgpu = "0.11"
+wgpu = "0.12"
 thiserror = "1.0"
 glam = "0.20"
 image = "0.23"

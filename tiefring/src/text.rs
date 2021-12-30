@@ -4,6 +4,7 @@ use fontdue::{LineMetrics, Metrics};
 use rect_packer::Packer;
 use wgpu::{
     util::DeviceExt, BindGroup, BindGroupLayout, Buffer, RenderPass, RenderPipeline, Sampler,
+    SamplerBindingType,
 };
 
 use crate::{
@@ -328,14 +329,7 @@ impl TextContext {
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
                             visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler {
-                                // This is only for TextureSampleType::Depth
-                                comparison: false,
-                                // This should be true if the sample_type of the texture is:
-                                //     TextureSampleType::Float { filterable: true }
-                                // Otherwise you'll get an error.
-                                filtering: true,
-                            },
+                            ty: wgpu::BindingType::Sampler(SamplerBindingType::Filtering),
                             count: None,
                         },
                     ],
@@ -446,7 +440,7 @@ impl TextRenderer {
                         cull_mode: Some(wgpu::Face::Back),
                         // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
                         polygon_mode: wgpu::PolygonMode::Fill,
-                        clamp_depth: false,
+                        unclipped_depth: false,
                         conservative: false,
                     },
                     depth_stencil: None,
@@ -455,6 +449,7 @@ impl TextRenderer {
                         mask: !0,
                         alpha_to_coverage_enabled: false,
                     },
+                    multiview: None,
                 });
 
         TextRenderer { render_pipeline }

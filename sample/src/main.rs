@@ -112,7 +112,7 @@ fn main() {
                             for j in 0..y {
                                 let sprite = tile_set.sprite(i, j);
                                 graphics.draw_sprite(
-                                    &sprite,
+                                    sprite,
                                     Position {
                                         x: i as f32 * 16.0 + 300.0,
                                         y: j as f32 * 16.0,

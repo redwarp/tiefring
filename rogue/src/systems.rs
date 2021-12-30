@@ -44,7 +44,7 @@ pub fn move_close(
                 (position.x, position.y),
                 (player_data.position.x, player_data.position.y),
             ) {
-                if let Some((x, y)) = path.into_iter().skip(1).next() {
+                if let Some((x, y)) = path.into_iter().nth(1) {
                     position.x = x;
                     position.y = y;
                 }

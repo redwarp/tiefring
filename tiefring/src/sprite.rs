@@ -2,6 +2,7 @@ use std::{path::Path, rc::Rc, sync::atomic::AtomicUsize};
 
 use wgpu::{
     util::DeviceExt, BindGroup, BindGroupLayout, Buffer, RenderPass, RenderPipeline, Sampler,
+    SamplerBindingType,
 };
 
 use crate::{camera::Camera, Canvas, Rect, SizeInPx, WgpuContext};
@@ -97,7 +98,7 @@ impl TileSet {
         let tile_dimensions = tile_dimensions.into();
 
         let x_count = dimensions.width / tile_dimensions.width;
-        let y_count = dimensions.width / tile_dimensions.width;
+        let y_count = dimensions.height / tile_dimensions.height;
 
         let mut sprites = Vec::with_capacity((x_count * y_count) as usize);
         for y in 0..y_count {
@@ -311,14 +312,7 @@ impl TextureRenderer {
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
                             visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler {
-                                // This is only for TextureSampleType::Depth
-                                comparison: false,
-                                // This should be true if the sample_type of the texture is:
-                                //     TextureSampleType::Float { filterable: true }
-                                // Otherwise you'll get an error.
-                                filtering: true,
-                            },
+                            ty: wgpu::BindingType::Sampler(SamplerBindingType::Filtering),
                             count: None,
                         },
                     ],
@@ -367,7 +361,7 @@ impl TextureRenderer {
                         // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
                         polygon_mode: wgpu::PolygonMode::Fill,
                         // Requires Features::DEPTH_CLAMPING
-                        clamp_depth: false,
+                        unclipped_depth: false,
                         // Requires Features::CONSERVATIVE_RASTERIZATION
                         conservative: false,
                     },
@@ -377,6 +371,7 @@ impl TextureRenderer {
                         mask: !0,
                         alpha_to_coverage_enabled: false,
                     },
+                    multiview: None,
                 });
 
         let sampler = context.device.create_sampler(&wgpu::SamplerDescriptor {

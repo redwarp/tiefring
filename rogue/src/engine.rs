@@ -171,7 +171,7 @@ fn render_game(game: &mut Game, graphics: &mut Graphics, font: &mut Font, sprite
                             TILE_SIZE,
                             TILE_SIZE,
                         );
-                        graphics.draw_sprite_in_rect(&sprites.sprite(tile), rect);
+                        graphics.draw_sprite_in_rect(sprites.sprite(tile), rect);
 
                         if !map.is_visible(i as i32, j as i32) {
                             graphics.draw_rect(rect, Color::rgba(0.0, 0.0, 0.0, 0.5));
