@@ -29,7 +29,9 @@ pub struct Player;
 
 pub struct Monster;
 
-pub struct RandomMover;
+pub struct MoveRandom;
+
+pub struct MoveClose;
 
 pub struct Vision {
     pub visible_positions: Vec<Position>,

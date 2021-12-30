@@ -25,6 +25,8 @@ impl DrawTextureOperations {
         }
     }
 }
+
+#[derive(Clone)]
 pub struct Sprite {
     pub dimensions: SizeInPx,
     pub(crate) tex_coords: Rect,
@@ -71,7 +73,7 @@ impl Sprite {
 pub struct TileSet {
     pub(crate) dimensions: SizeInPx,
     pub(crate) tile_dimensions: SizeInPx,
-    texture: Rc<Texture>,
+    sprites: Vec<Sprite>,
 }
 
 impl TileSet {
@@ -91,11 +93,35 @@ impl TileSet {
             rgba,
             dimensions.into(),
         ));
+        let dimensions = dimensions.into();
+        let tile_dimensions = tile_dimensions.into();
+
+        let x_count = dimensions.width / tile_dimensions.width;
+        let y_count = dimensions.width / tile_dimensions.width;
+
+        let mut sprites = Vec::with_capacity((x_count * y_count) as usize);
+        for y in 0..y_count {
+            for x in 0..x_count {
+                let tex_coords = Rect {
+                    left: (x * tile_dimensions.width) as f32 / dimensions.width as f32,
+                    top: (y * tile_dimensions.height) as f32 / dimensions.height as f32,
+                    right: ((x + 1) * tile_dimensions.width) as f32 / dimensions.width as f32,
+                    bottom: ((y + 1) * tile_dimensions.height) as f32 / dimensions.height as f32,
+                };
+
+                let sprite = Sprite {
+                    dimensions: tile_dimensions,
+                    tex_coords,
+                    texture: texture.clone(),
+                };
+                sprites.push(sprite);
+            }
+        }
 
         TileSet {
-            dimensions: dimensions.into(),
-            tile_dimensions: tile_dimensions.into(),
-            texture,
+            dimensions,
+            tile_dimensions,
+            sprites,
         }
     }
 
@@ -126,19 +152,16 @@ impl TileSet {
         )
     }
 
-    pub fn sprite(&self, x: u32, y: u32) -> Sprite {
-        let tex_coords = Rect {
-            left: (x * self.tile_dimensions.width) as f32 / self.dimensions.width as f32,
-            top: (y * self.tile_dimensions.height) as f32 / self.dimensions.height as f32,
-            right: ((x + 1) * self.tile_dimensions.width) as f32 / self.dimensions.width as f32,
-            bottom: ((y + 1) * self.tile_dimensions.height) as f32 / self.dimensions.height as f32,
-        };
-
-        Sprite {
-            dimensions: self.tile_dimensions,
-            tex_coords,
-            texture: self.texture.clone(),
+    pub fn sprite(&self, x: u32, y: u32) -> &Sprite {
+        let (width, height) = self.tile_count();
+        if x > width || y > height {
+            panic!("x should be between 0 and {}, currently {}. y should be between 0 and {}, currently {}.", width, x, height, y);
         }
+
+        let index = (y * width + x) as usize;
+        self.sprites
+            .get(index)
+            .expect("We already checked for out of bounds before.")
     }
 }
 

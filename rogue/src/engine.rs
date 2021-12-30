@@ -1,6 +1,10 @@
 use anyhow::Result;
 use bevy_ecs::prelude::Mut;
-use tiefring::{text::Font, Canvas, CanvasSettings, Color, Graphics, Rect, SizeInPx};
+use tiefring::{
+    sprite::{Sprite, TileSet},
+    text::Font,
+    Canvas, CanvasSettings, Color, Graphics, Rect, SizeInPx,
+};
 use winit::{
     dpi::LogicalSize,
     event::{Event, VirtualKeyCode},
@@ -13,10 +17,10 @@ use crate::{
     components::{Body, Position},
     game::{Game, PlayerData, Update},
     inputs::Input,
-    map::Map,
+    map::{Map, Tile},
 };
 
-const TILE_SIZE: f32 = 16.0;
+const TILE_SIZE: f32 = 32.0;
 const FONT_NAME: &str = "VT323-Regular.ttf";
 
 pub struct Engine {
@@ -62,6 +66,8 @@ impl Engine {
             .unwrap();
         let mut font = Font::load_font(fonts.join(FONT_NAME)).unwrap();
 
+        let sprites = Sprites::new(&mut canvas);
+
         window.set_visible(true);
 
         let mut redraw = true;
@@ -73,7 +79,7 @@ impl Engine {
                 if redraw {
                     canvas
                         .draw(|graphics| {
-                            render_game(&mut game, graphics, &mut font);
+                            render_game(&mut game, graphics, &mut font, &sprites);
                         })
                         .unwrap();
                 } else {
@@ -149,7 +155,7 @@ impl Engine {
     }
 }
 
-fn render_game(game: &mut Game, graphics: &mut Graphics, font: &mut Font) {
+fn render_game(game: &mut Game, graphics: &mut Graphics, font: &mut Font, sprites: &Sprites) {
     let (dx, dy) = Engine::calculate_translation(game, graphics);
     let dx = dx as f32 * TILE_SIZE;
     let dy = dy as f32 * TILE_SIZE;
@@ -165,7 +171,7 @@ fn render_game(game: &mut Game, graphics: &mut Graphics, font: &mut Font) {
                             TILE_SIZE,
                             TILE_SIZE,
                         );
-                        graphics.draw_rect(rect, tile.color);
+                        graphics.draw_sprite_in_rect(&sprites.sprite(tile), rect);
 
                         if !map.is_visible(i as i32, j as i32) {
                             graphics.draw_rect(rect, Color::rgba(0.0, 0.0, 0.0, 0.5));
@@ -203,4 +209,26 @@ fn draw_char(
         position,
         color,
     );
+}
+
+struct Sprites {
+    tiles: TileSet,
+}
+
+impl Sprites {
+    fn new(canvas: &mut Canvas) -> Self {
+        let sprites = find_folder::Search::ParentsThenKids(3, 3)
+            .for_folder("rogue/sprites")
+            .unwrap();
+
+        let tiles = TileSet::load_image(canvas, sprites.join("tiles.png"), (32, 32)).unwrap();
+        Self { tiles }
+    }
+
+    fn sprite(&self, tile: &Tile) -> &Sprite {
+        match tile.walkable {
+            true => self.tiles.sprite(5, 0),
+            false => self.tiles.sprite(1, 0),
+        }
+    }
 }

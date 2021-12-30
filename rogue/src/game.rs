@@ -40,6 +40,11 @@ enum Stages {
     Monster,
 }
 
+#[derive(Debug, Clone, Hash, PartialEq, Eq, SystemLabel)]
+enum Systems {
+    Vision,
+}
+
 impl Game {
     pub fn new(width: i32, height: i32) -> Self {
         let mut schedule = Schedule::default();
@@ -47,8 +52,9 @@ impl Game {
             .add_stage(
                 Stages::Update,
                 SystemStage::parallel()
-                    .with_system(systems::move_randomly.system())
-                    .with_system(systems::field_of_view.system()),
+                    .with_system(systems::field_of_view.system().label(Systems::Vision))
+                    .with_system(systems::move_random.system())
+                    .with_system(systems::move_close.system().after(Systems::Vision)),
             )
             .add_stage_after(
                 Stages::Update,
@@ -76,6 +82,7 @@ impl Game {
         spawner::orc(&mut world, "Arnold", 3, 7);
         spawner::orc(&mut world, "Betty", 5, 12);
         spawner::orc(&mut world, "Irma", 14, 2);
+        spawner::deer(&mut world, 5, 5);
 
         let run_state = RunState::Running;
 
@@ -126,7 +133,7 @@ impl Game {
                 .for_each_mut(world, |mut position| {
                     x = position.x + dx;
                     y = position.y + dy;
-                    if map.is_walkable(x, y) {
+                    if map.is_walkable((x, y)) {
                         position.x = x;
                         position.y = y;
                         moved = true;

@@ -11,11 +11,11 @@ mod map;
 mod spawner;
 mod systems;
 
-const WIDTH_IN_TILES: i32 = 80;
-const HEIGHT_IN_TILES: i32 = 50;
+const WIDTH_IN_TILES: i32 = 40;
+const HEIGHT_IN_TILES: i32 = 25;
 
 fn main() -> Result<()> {
-    let game = Game::new(WIDTH_IN_TILES + 4, HEIGHT_IN_TILES - 4);
+    let game = Game::new(WIDTH_IN_TILES, HEIGHT_IN_TILES);
 
     let mut engine = Engine::new(WIDTH_IN_TILES, HEIGHT_IN_TILES);
     engine.run(game)?;

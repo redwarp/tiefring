@@ -131,7 +131,7 @@ impl FovMap for Map {
         (self.width as i32, self.height as i32)
     }
 
-    fn is_transparent(&self, x: i32, y: i32) -> bool {
+    fn is_transparent(&self, (x, y): (i32, i32)) -> bool {
         if self.in_bounds(x, y) {
             let index = self.index(x, y);
             self.tiles[index].transparent
@@ -140,7 +140,7 @@ impl FovMap for Map {
         }
     }
 
-    fn is_walkable(&self, x: i32, y: i32) -> bool {
+    fn is_walkable(&self, (x, y): (i32, i32)) -> bool {
         if self.in_bounds(x, y) {
             let index = self.index(x, y);
             self.tiles[index].walkable
