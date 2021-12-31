@@ -164,6 +164,20 @@ impl TileSet {
             .get(index)
             .expect("We already checked for out of bounds before.")
     }
+
+    pub fn sprite_with_index(&self, index: usize) -> &Sprite {
+        if index >= self.sprites.len() {
+            panic!(
+                "Index {} out of bounds, max index is {}",
+                index,
+                self.sprites.len()
+            );
+        }
+
+        self.sprites
+            .get(index)
+            .expect("We already checked for out of bounds before.")
+    }
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, Debug)]

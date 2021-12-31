@@ -189,11 +189,10 @@ fn render_game(
                 let min_y = (-dy).max(0);
                 let max_x = (min_x + cell_count_x).min(map.width);
                 let max_y = (min_y + cell_count_y).min(map.height);
-                println!("x: {} - {}, y: {} - {}", min_x, max_x, min_y, max_y);
 
                 for j in min_y..max_y {
                     for i in min_x..max_x {
-                        let tile = map.tile_at_position(i, j).unwrap();
+                        let tile_index = map.tile_index_at_position(i, j).unwrap();
                         if map.is_revealed(i as i32, j as i32) {
                             let rect = Rect::from_xywh(
                                 i as f32 * TILE_SIZE,
@@ -201,7 +200,10 @@ fn render_game(
                                 TILE_SIZE,
                                 TILE_SIZE,
                             );
-                            graphics.draw_sprite_in_rect(sprites.sprite(tile), rect);
+                            graphics.draw_sprite_in_rect(
+                                sprites.tiles.sprite_with_index(*tile_index),
+                                rect,
+                            );
 
                             if !map.is_visible(i as i32, j as i32) {
                                 graphics.draw_rect(rect, Color::rgba(0.0, 0.0, 0.05, 0.8));
