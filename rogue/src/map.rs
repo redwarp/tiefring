@@ -155,7 +155,7 @@ impl Map {
 
     pub fn reset_blocked(&mut self) {
         for (index, tile) in self.tiles.iter().enumerate() {
-            self.blocked[index] = tile.walkable == false;
+            self.blocked[index] = !tile.walkable;
         }
     }
 
@@ -268,7 +268,7 @@ fn spawn_monsters(rooms: &[Room], rng: &mut StdRng, world: &mut World) {
     let mut orc_number = 0;
     for room in &rooms[1..] {
         let (x, y) = room.center();
-        if rng.gen::<f32>() < 0.8 {
+        if rng.gen::<f32>() < 0.2 {
             orc_number += 1;
             spawner::orc(world, format!("{}", orc_number).as_str(), x, y);
         } else {
@@ -366,31 +366,31 @@ impl MapRepresentation {
         if values[0] == 1 && values[1] == 1 && values[3] == 1 {
             bitmask += 1;
         }
-        bitmask = bitmask << 1;
+        bitmask <<= 1;
         if values[1] == 1 {
             bitmask += 1;
         }
-        bitmask = bitmask << 1;
+        bitmask <<= 1;
         if values[2] == 1 && values[1] == 1 && values[4] == 1 {
             bitmask += 1;
         }
-        bitmask = bitmask << 1;
+        bitmask <<= 1;
         if values[3] == 1 {
             bitmask += 1;
         }
-        bitmask = bitmask << 1;
+        bitmask <<= 1;
         if values[4] == 1 {
             bitmask += 1;
         }
-        bitmask = bitmask << 1;
+        bitmask <<= 1;
         if values[5] == 1 && values[3] == 1 && values[6] == 1 {
             bitmask += 1;
         }
-        bitmask = bitmask << 1;
+        bitmask <<= 1;
         if values[6] == 1 {
             bitmask += 1;
         }
-        bitmask = bitmask << 1;
+        bitmask <<= 1;
         if values[7] == 1 && values[6] == 1 && values[4] == 1 {
             bitmask += 1;
         }

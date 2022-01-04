@@ -3,6 +3,7 @@ use engine::Engine;
 
 use crate::game::Game;
 
+mod actions;
 mod components;
 mod engine;
 mod game;
@@ -10,6 +11,7 @@ mod inputs;
 mod map;
 mod spawner;
 mod systems;
+mod utils;
 
 const WIDTH_IN_TILES: i32 = 40;
 const HEIGHT_IN_TILES: i32 = 25;

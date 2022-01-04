@@ -17,8 +17,9 @@ use crate::{inputs::Input, systems};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum RunState {
-    AiTurn,
     WaitingForInput,
+    PlayerTurn,
+    AiTurn,
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -38,6 +39,7 @@ enum Stages {
     Update,
     MapData,
     Monster,
+    ResolveActions,
 }
 
 fn ai_turn(run_state: Res<RunState>) -> ShouldRun {
@@ -57,11 +59,16 @@ impl Game {
                 SystemStage::parallel()
                     .with_run_criteria(ai_turn.system())
                     .with_system(systems::move_random.system())
-                    .with_system(systems::move_close.system())
+                    .with_system(systems::move_to_player.system())
                     .with_system(systems::insult.system()),
             )
             .add_stage_after(
                 Stages::Monster,
+                Stages::ResolveActions,
+                SystemStage::parallel().with_system(systems::move_action.system()),
+            )
+            .add_stage_after(
+                Stages::ResolveActions,
                 Stages::MapData,
                 SystemStage::parallel()
                     .with_system(systems::update_visible.system())
@@ -99,12 +106,6 @@ impl Game {
         let run_state: &RunState = self.world.get_resource().unwrap();
 
         match run_state {
-            RunState::AiTurn => {
-                self.schedule.run(&mut self.world);
-                self.world
-                    .insert_resource::<RunState>(RunState::WaitingForInput);
-                Update::Refresh
-            }
             RunState::WaitingForInput => {
                 if let Some(Input::Escape) = input {
                     Update::Exit
@@ -116,6 +117,13 @@ impl Game {
                     Update::NoOp
                 }
             }
+            RunState::AiTurn => {
+                self.schedule.run(&mut self.world);
+                self.world
+                    .insert_resource::<RunState>(RunState::WaitingForInput);
+                Update::Refresh
+            }
+            RunState::PlayerTurn => Update::NoOp,
         }
     }
 
