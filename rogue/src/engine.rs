@@ -1,9 +1,7 @@
 use anyhow::Result;
 use bevy_ecs::prelude::Mut;
 use tiefring::{
-    sprite::{Sprite, TileSet},
-    text::Font,
-    Canvas, CanvasSettings, Color, Graphics, Rect, SizeInPx,
+    sprite::TileSet, text::Font, Canvas, CanvasSettings, Color, Graphics, Rect, SizeInPx,
 };
 use winit::{
     dpi::LogicalSize,
@@ -17,7 +15,7 @@ use crate::{
     components::{Body, Position},
     game::{Game, PlayerData, Update},
     inputs::Input,
-    map::{Map, Tile},
+    map::Map,
 };
 
 const TILE_SIZE: f32 = 32.0;
@@ -184,7 +182,7 @@ fn render_game(
             y: translate_y,
         },
         |graphics| {
-            game.world.resource_scope(|_world, map: Mut<Map>| {
+            game.world.resource_scope(|world, map: Mut<Map>| {
                 let min_x = (-dx).max(0);
                 let min_y = (-dy).max(0);
                 let max_x = (min_x + cell_count_x).min(map.width);
@@ -211,10 +209,13 @@ fn render_game(
                         }
                     }
                 }
-            });
-            let mut query = game.world.query::<(&Body, &Position)>();
-            query.for_each(&game.world, |(body, position)| {
-                body.render(graphics, position, font);
+
+                let mut query = world.query::<(&Body, &Position)>();
+                query.for_each(world, |(body, position)| {
+                    if map.is_visible(position.x, position.y) {
+                        body.render(graphics, position, font);
+                    }
+                });
             });
         },
     );
@@ -256,12 +257,5 @@ impl Sprites {
 
         let tiles = TileSet::load_image(canvas, sprites.join("tiles.png"), (32, 32)).unwrap();
         Self { tiles }
-    }
-
-    fn sprite(&self, tile: &Tile) -> &Sprite {
-        match tile.walkable {
-            true => self.tiles.sprite(5, 0),
-            false => self.tiles.sprite(1, 0),
-        }
     }
 }

@@ -3,7 +3,7 @@ use rand::{prelude::StdRng, Rng};
 use torchbearer::path::PathMap;
 
 use crate::{
-    components::{Monster, MoveClose, MoveRandom, Name, Player, Position, Vision},
+    components::{Monster, MoveClose, MoveRandom, Name, Player, Position, Solid, Vision},
     game::PlayerData,
     map::Map,
 };
@@ -33,7 +33,7 @@ pub fn move_random(
 }
 
 pub fn move_close(
-    map: Res<Map>,
+    map: ResMut<Map>,
     player_data: Res<PlayerData>,
     query: Query<(&mut Position, &Vision), With<MoveClose>>,
 ) {
@@ -45,8 +45,10 @@ pub fn move_close(
                 (player_data.position.x, player_data.position.y),
             ) {
                 if let Some((x, y)) = path.into_iter().nth(1) {
-                    position.x = x;
-                    position.y = y;
+                    let new_position = Position { x, y };
+                    if player_data.position != new_position {
+                        *position = new_position;
+                    }
                 }
             }
         }
@@ -66,10 +68,18 @@ pub fn field_of_view(map: Res<Map>, query: Query<(&mut Vision, &Position), Chang
     });
 }
 
-pub fn update_map(mut map: ResMut<Map>, query: Query<&Vision, With<Player>>) {
+pub fn update_visible(mut map: ResMut<Map>, query: Query<&Vision, With<Player>>) {
     map.reset_visible();
     query.for_each(|field_of_view| {
         map.reveal(&field_of_view.visible_positions);
+    });
+}
+
+pub fn update_blocked(mut map: ResMut<Map>, query: Query<&Position, With<Solid>>) {
+    map.reset_blocked();
+    query.for_each(|position| {
+        let index = map.index_from_position(position);
+        map.blocked[index] = true;
     });
 }
 

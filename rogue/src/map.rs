@@ -49,14 +49,10 @@ pub struct Map {
     visible_tiles: Vec<bool>,
     pub starting_position: Position,
     pub map_representation: MapRepresentation,
+    pub blocked: Vec<bool>,
 }
 
 impl Map {
-    pub fn reset_visible(&mut self) {
-        for tile in self.visible_tiles.iter_mut() {
-            *tile = false;
-        }
-    }
     pub fn reveal(&mut self, positions: &[Position]) {
         for position in positions {
             let index = self.index_from_position(position);
@@ -87,6 +83,7 @@ impl Map {
         let visible_tiles = vec![false; tile_count];
         let starting_position = Position::new(0, 0);
         let map_representation = MapRepresentation::with_capacity(0);
+        let blocked = vec![false; tile_count];
 
         let mut map = Self {
             width,
@@ -96,6 +93,7 @@ impl Map {
             visible_tiles,
             starting_position,
             map_representation,
+            blocked,
         };
 
         let max_room = (width * height) / 100;
@@ -138,6 +136,7 @@ impl Map {
 
         spawn_monsters(&rooms, &mut rng, world);
         map.map_representation = MapRepresentation::new(width, height, &map.tiles);
+        map.reset_blocked();
 
         map
     }
@@ -148,11 +147,23 @@ impl Map {
             .get(index_with_width(self.width, x, y))
     }
 
-    fn index(&self, x: i32, y: i32) -> usize {
+    pub fn reset_visible(&mut self) {
+        for tile in self.visible_tiles.iter_mut() {
+            *tile = false;
+        }
+    }
+
+    pub fn reset_blocked(&mut self) {
+        for (index, tile) in self.tiles.iter().enumerate() {
+            self.blocked[index] = tile.walkable == false;
+        }
+    }
+
+    pub fn index(&self, x: i32, y: i32) -> usize {
         index_with_width(self.width, x, y)
     }
 
-    fn index_from_position(&self, &Position { x, y }: &Position) -> usize {
+    pub fn index_from_position(&self, &Position { x, y }: &Position) -> usize {
         index_with_width(self.width, x, y)
     }
 
@@ -184,7 +195,7 @@ impl PathMap for Map {
     fn is_walkable(&self, (x, y): (i32, i32)) -> bool {
         if self.in_bounds(x, y) {
             let index = self.index(x, y);
-            self.tiles[index].walkable
+            !self.blocked[index]
         } else {
             false
         }

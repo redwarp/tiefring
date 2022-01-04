@@ -2,7 +2,7 @@ use tiefring::Color;
 
 pub struct Name(pub String);
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Position {
     pub x: i32,
     pub y: i32,
@@ -46,3 +46,5 @@ impl Vision {
         }
     }
 }
+
+pub struct Solid;

@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use bevy_ecs::prelude::*;
+use bevy_ecs::schedule::ShouldRun;
 use bevy_ecs::{
     prelude::World,
     schedule::{Schedule, SystemStage},
@@ -14,10 +15,10 @@ use crate::map::Map;
 use crate::spawner;
 use crate::{inputs::Input, systems};
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum RunState {
-    Running,
-    Paused,
+    AiTurn,
+    WaitingForInput,
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -30,50 +31,50 @@ pub enum Update {
 pub struct Game {
     pub world: World,
     pub schedule: Schedule,
-    run_state: RunState,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, StageLabel)]
 enum Stages {
     Update,
-    Map,
+    MapData,
     Monster,
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, SystemLabel)]
-enum Systems {
-    Vision,
+fn ai_turn(run_state: Res<RunState>) -> ShouldRun {
+    match *run_state {
+        RunState::AiTurn => ShouldRun::Yes,
+        _ => ShouldRun::No,
+    }
 }
 
 impl Game {
     pub fn new(width: i32, height: i32) -> Self {
         let mut schedule = Schedule::default();
+
         schedule
             .add_stage(
-                Stages::Update,
-                SystemStage::parallel()
-                    .with_system(systems::field_of_view.system().label(Systems::Vision))
-                    .with_system(systems::move_random.system())
-                    .with_system(systems::move_close.system().after(Systems::Vision)),
-            )
-            .add_stage_after(
-                Stages::Update,
-                Stages::Map,
-                SystemStage::parallel().with_system(systems::update_map.system()),
-            )
-            .add_stage_after(
-                Stages::Map,
                 Stages::Monster,
-                SystemStage::parallel().with_system(systems::insult.system()),
+                SystemStage::parallel()
+                    .with_run_criteria(ai_turn.system())
+                    .with_system(systems::move_random.system())
+                    .with_system(systems::move_close.system())
+                    .with_system(systems::insult.system()),
+            )
+            .add_stage_after(
+                Stages::Monster,
+                Stages::MapData,
+                SystemStage::parallel()
+                    .with_system(systems::update_visible.system())
+                    .with_system(systems::update_blocked.system()),
+            )
+            .add_stage_after(
+                Stages::MapData,
+                Stages::Update,
+                SystemStage::parallel().with_system(systems::field_of_view.system()),
             );
 
         let mut world = World::new();
         let map = Map::dungeon(width, height, &mut world);
-
-        // let map = Map::empty(width, height)
-        //     .surround()
-        //     .random_walls()
-        //     .random_monsters(&mut world);
 
         let starting_position = map.starting_position;
         world.insert_resource(map);
@@ -86,28 +87,30 @@ impl Game {
             position: starting_position,
         };
         world.insert_resource(player_data);
+        // Run the schedule work once to update initial field of view.
+        world.insert_resource::<RunState>(RunState::WaitingForInput);
+        schedule.run(&mut world);
+        world.insert_resource::<RunState>(RunState::AiTurn);
 
-        let run_state = RunState::Running;
-
-        Self {
-            world,
-            schedule,
-            run_state,
-        }
+        Self { world, schedule }
     }
 
     pub fn update(&mut self, input: Option<Input>) -> Update {
-        match self.run_state {
-            RunState::Running => {
+        let run_state: &RunState = self.world.get_resource().unwrap();
+
+        match run_state {
+            RunState::AiTurn => {
                 self.schedule.run(&mut self.world);
-                self.run_state = RunState::Paused;
+                self.world
+                    .insert_resource::<RunState>(RunState::WaitingForInput);
                 Update::Refresh
             }
-            RunState::Paused => {
+            RunState::WaitingForInput => {
                 if let Some(Input::Escape) = input {
                     Update::Exit
                 } else if self.try_move_player(&input) {
-                    self.run_state = RunState::Running;
+                    self.schedule.run(&mut self.world);
+                    self.world.insert_resource::<RunState>(RunState::AiTurn);
                     Update::NoOp
                 } else {
                     Update::NoOp
