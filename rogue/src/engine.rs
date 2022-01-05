@@ -237,6 +237,7 @@ impl Sprites {
             BodyType::Hero => self.people.sprite(0, 0),
             BodyType::Orc => self.people.sprite(1, 0),
             BodyType::Deer => self.people.sprite(2, 0),
+            BodyType::BonePile => self.people.sprite(0, 1),
         }
     }
 }

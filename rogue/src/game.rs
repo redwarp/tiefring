@@ -11,8 +11,8 @@ use rand::prelude::StdRng;
 use rand::SeedableRng;
 use torchbearer::path::PathMap;
 
-use crate::actions::MoveAction;
-use crate::components::{Player, Position};
+use crate::actions::{AttackAction, MoveAction};
+use crate::components::{Health, Monster, Player, Position};
 use crate::map::Map;
 use crate::spawner;
 use crate::{inputs::Input, systems};
@@ -21,7 +21,6 @@ use crate::{inputs::Input, systems};
 pub enum RunState {
     Init,
     WaitingForInput,
-    PlayerTurn,
     AiTurn,
 }
 
@@ -74,10 +73,19 @@ impl Game {
             .add_stage_after(
                 Stages::Monster,
                 Stages::ResolveActions,
-                SystemStage::parallel().with_system(systems::move_action.system()),
+                SystemStage::parallel()
+                    .with_system(systems::move_action.system())
+                    .with_system(systems::attack_action.system()),
             )
             .add_stage_after(
                 Stages::ResolveActions,
+                Stages::Cleanup,
+                SystemStage::parallel()
+                    .with_system(systems::cleanup_actions.system())
+                    .with_system(systems::death.system()),
+            )
+            .add_stage_after(
+                Stages::Cleanup,
                 Stages::MapData,
                 SystemStage::parallel()
                     .with_system(systems::update_blocked.system())
@@ -89,11 +97,6 @@ impl Game {
                 SystemStage::parallel()
                     .with_system(systems::field_of_view.system().label(Systems::FieldOfView))
                     .with_system(systems::update_visible.system().after(Systems::FieldOfView)),
-            )
-            .add_stage_after(
-                Stages::Vision,
-                Stages::Cleanup,
-                SystemStage::parallel().with_system(systems::cleanup_actions.system()),
             );
 
         let mut world = World::new();
@@ -146,7 +149,6 @@ impl Game {
                     .insert_resource::<RunState>(RunState::WaitingForInput);
                 Update::Refresh
             }
-            RunState::PlayerTurn => Update::NoOp,
         };
 
         if run_state != RunState::WaitingForInput {
@@ -166,6 +168,7 @@ impl Game {
             Some(Input::Down) => self.move_player(0, 1),
             Some(Input::Left) => self.move_player(-1, 0),
             Some(Input::Right) => self.move_player(1, 0),
+            Some(Input::Space) => true,
             _ => false,
         }
     }
@@ -173,30 +176,57 @@ impl Game {
     fn move_player(&mut self, dx: i32, dy: i32) -> bool {
         let mut x = 0;
         let mut y = 0;
-        let mut moved = false;
+        let mut acted = false;
 
         let player_entity: Entity = self.world.get_resource::<PlayerData>().unwrap().entity;
 
-        self.world.resource_scope(|world, map: Mut<Map>| {
-            world
-                .query_filtered::<&Position, With<Player>>()
-                .for_each(world, |position| {
-                    x = position.x + dx;
-                    y = position.y + dy;
-                    if map.is_walkable((x, y)) {
-                        moved = true;
-                    }
-                });
-        });
-        if moved {
-            self.world.spawn().insert(MoveAction {
-                entity: player_entity,
-                x,
-                y,
+        self.world
+            .query_filtered::<&Position, With<Player>>()
+            .for_each(&self.world, |position| {
+                x = position.x + dx;
+                y = position.y + dy;
             });
+        // Let's look for enemies
+        let position = Position { x, y };
+        let mut attack_action = None;
+        for (target, monster_position) in self
+            .world
+            .query_filtered::<(Entity, &Position), (With<Monster>, With<Health>)>()
+            .iter(&self.world)
+        {
+            if *monster_position == position {
+                attack_action = Some(AttackAction {
+                    entity: player_entity,
+                    target,
+                });
+                break;
+            }
         }
 
-        moved
+        match attack_action {
+            Some(attack_action) => {
+                println!("Attacking some monster");
+                self.world.spawn().insert(attack_action);
+                acted = true;
+            }
+            None => {
+                if self
+                    .world
+                    .get_resource::<Map>()
+                    .unwrap()
+                    .is_walkable((x, y))
+                {
+                    self.world.spawn().insert(MoveAction {
+                        entity: player_entity,
+                        x,
+                        y,
+                    });
+                    acted = true;
+                }
+            }
+        }
+
+        acted
     }
 }
 

@@ -1,4 +1,4 @@
-use bevy_ecs::prelude::{Entity, World};
+use bevy_ecs::prelude::{Commands, Entity, World};
 
 use crate::components::{
     Body, BodyType, Health, Monster, MoveClose, MoveRandom, Name, Player, Position, Solid, Vision,
@@ -41,5 +41,14 @@ pub fn deer(world: &mut World, x: i32, y: i32) -> Entity {
         .insert(MoveRandom)
         .insert(Health::full_health(8))
         .insert(Name("A deer".to_string()))
+        .id()
+}
+
+pub fn spawn_body(commands: &mut Commands, x: i32, y: i32, name: &str) -> Entity {
+    commands
+        .spawn()
+        .insert(Position::new(x, y))
+        .insert(Body::new(BodyType::BonePile))
+        .insert(Name(format!("Body of {}", name)))
         .id()
 }

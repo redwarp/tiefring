@@ -5,3 +5,8 @@ pub struct MoveAction {
     pub x: i32,
     pub y: i32,
 }
+
+pub struct AttackAction {
+    pub entity: Entity,
+    pub target: Entity,
+}

@@ -11,6 +11,7 @@ impl Position {
         Self { x, y }
     }
 
+    #[allow(dead_code)]
     pub fn distance_to(&self, other: &Position) -> f32 {
         ((self.x - other.x).pow(2) as f32 + (self.y - other.y).pow(2) as f32).sqrt()
     }
@@ -31,6 +32,7 @@ pub enum BodyType {
     Hero,
     Orc,
     Deer,
+    BonePile,
 }
 
 pub struct Player;
@@ -58,8 +60,8 @@ impl Vision {
 pub struct Solid;
 
 pub struct Health {
-    hp: i32,
-    max_hp: i32,
+    pub hp: i32,
+    pub max_hp: i32,
 }
 
 impl Health {

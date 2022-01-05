@@ -7,6 +7,7 @@ pub enum Input {
     Right,
     Left,
     Escape,
+    Space,
 }
 
 impl Input {
@@ -21,6 +22,8 @@ impl Input {
             Some(Input::Left)
         } else if input_helper.key_pressed(VirtualKeyCode::Escape) {
             Some(Input::Escape)
+        } else if input_helper.key_pressed(VirtualKeyCode::Space) {
+            Some(Input::Space)
         } else {
             None
         }

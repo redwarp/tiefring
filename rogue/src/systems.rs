@@ -4,10 +4,11 @@ use rand::{prelude::StdRng, Rng};
 use torchbearer::path::PathMap;
 
 use crate::{
-    actions::MoveAction,
-    components::{Monster, MoveClose, MoveRandom, Name, Player, Position, Solid, Vision},
+    actions::{AttackAction, MoveAction},
+    components::{Health, Monster, MoveClose, MoveRandom, Name, Player, Position, Solid, Vision},
     game::PlayerData,
     map::Map,
+    spawner,
     utils::find_path,
 };
 
@@ -81,6 +82,14 @@ pub fn move_action(
     });
 }
 
+pub fn attack_action(attack_actions: Query<&AttackAction>, mut health_stats: Query<&mut Health>) {
+    attack_actions.for_each(|&AttackAction { entity: _, target }| {
+        if let Ok(mut health) = health_stats.get_mut(target) {
+            health.hp = (health.hp - 8).max(0);
+        }
+    });
+}
+
 pub fn field_of_view(map: Res<Map>, query: Query<(&mut Vision, &Position), Changed<Position>>) {
     query.for_each_mut(|(mut field_of_view, position)| {
         field_of_view.visible_positions = torchbearer::fov::field_of_view(
@@ -127,8 +136,20 @@ pub fn insult(player_data: Res<PlayerData>, query: Query<(&Vision, &Name), With<
     });
 }
 
-pub fn cleanup_actions(mut commands: Commands, query: Query<Entity, With<MoveAction>>) {
-    query.for_each(|entity| {
-        commands.entity(entity).despawn();
+pub fn cleanup_actions(
+    mut commands: Commands,
+    move_query: Query<Entity, With<MoveAction>>,
+    attack_query: Query<Entity, With<AttackAction>>,
+) {
+    move_query.for_each(|entity| commands.entity(entity).despawn());
+    attack_query.for_each(|entity| commands.entity(entity).despawn());
+}
+
+pub fn death(mut commands: Commands, health_stats: Query<(Entity, &Health, &Position, &Name)>) {
+    health_stats.for_each(|(entity, health, position, name)| {
+        if health.hp <= 0 {
+            spawner::spawn_body(&mut commands, position.x, position.y, &name.0);
+            commands.entity(entity).despawn();
+        }
     });
 }
