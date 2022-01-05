@@ -1,4 +1,5 @@
 use bevy_ecs::prelude::{Changed, Commands, Entity, Query, Res, ResMut, With};
+use log::info;
 use rand::{prelude::StdRng, Rng};
 use torchbearer::path::PathMap;
 
@@ -59,11 +60,10 @@ pub fn move_to_player(
 
 pub fn move_action(
     mut map: ResMut<Map>,
-    mut commands: Commands,
-    move_actions: Query<(Entity, &MoveAction)>,
+    move_actions: Query<&MoveAction>,
     mut positions: Query<(&mut Position, Option<&Solid>)>,
 ) {
-    move_actions.for_each(|(action_entity, &MoveAction { entity, x, y })| {
+    move_actions.for_each(|&MoveAction { entity, x, y }| {
         if let Ok((mut position, solid)) = positions.get_mut(entity) {
             if map.is_walkable((x, y)) {
                 if solid.is_some() {
@@ -78,8 +78,6 @@ pub fn move_action(
                 position.y = y;
             }
         }
-
-        commands.entity(action_entity).despawn();
     });
 }
 
@@ -111,10 +109,26 @@ pub fn update_blocked(mut map: ResMut<Map>, query: Query<&Position, With<Solid>>
     });
 }
 
+pub fn update_player_position(
+    mut player_data: ResMut<PlayerData>,
+    query: Query<&Position, With<Player>>,
+) {
+    query.for_each(|position| {
+        // We expect only one.
+        player_data.position = *position;
+    });
+}
+
 pub fn insult(player_data: Res<PlayerData>, query: Query<(&Vision, &Name), With<Monster>>) {
     query.for_each(|(vision, Name(name))| {
         if vision.visible_positions.contains(&player_data.position) {
-            println!("{} insults you", name);
+            info!("{} insults you", name);
         }
+    });
+}
+
+pub fn cleanup_actions(mut commands: Commands, query: Query<Entity, With<MoveAction>>) {
+    query.for_each(|entity| {
+        commands.entity(entity).despawn();
     });
 }

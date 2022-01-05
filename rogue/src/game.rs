@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::schedule::ShouldRun;
@@ -6,10 +6,12 @@ use bevy_ecs::{
     prelude::World,
     schedule::{Schedule, SystemStage},
 };
+use log::{debug, info};
 use rand::prelude::StdRng;
 use rand::SeedableRng;
 use torchbearer::path::PathMap;
 
+use crate::actions::MoveAction;
 use crate::components::{Player, Position};
 use crate::map::Map;
 use crate::spawner;
@@ -17,6 +19,7 @@ use crate::{inputs::Input, systems};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum RunState {
+    Init,
     WaitingForInput,
     PlayerTurn,
     AiTurn,
@@ -36,10 +39,16 @@ pub struct Game {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, StageLabel)]
 enum Stages {
-    Update,
+    Vision,
     MapData,
     Monster,
     ResolveActions,
+    Cleanup,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, SystemLabel)]
+enum Systems {
+    FieldOfView,
 }
 
 fn ai_turn(run_state: Res<RunState>) -> ShouldRun {
@@ -71,13 +80,20 @@ impl Game {
                 Stages::ResolveActions,
                 Stages::MapData,
                 SystemStage::parallel()
-                    .with_system(systems::update_visible.system())
-                    .with_system(systems::update_blocked.system()),
+                    .with_system(systems::update_blocked.system())
+                    .with_system(systems::update_player_position.system()),
             )
             .add_stage_after(
                 Stages::MapData,
-                Stages::Update,
-                SystemStage::parallel().with_system(systems::field_of_view.system()),
+                Stages::Vision,
+                SystemStage::parallel()
+                    .with_system(systems::field_of_view.system().label(Systems::FieldOfView))
+                    .with_system(systems::update_visible.system().after(Systems::FieldOfView)),
+            )
+            .add_stage_after(
+                Stages::Vision,
+                Stages::Cleanup,
+                SystemStage::parallel().with_system(systems::cleanup_actions.system()),
             );
 
         let mut world = World::new();
@@ -95,17 +111,23 @@ impl Game {
         };
         world.insert_resource(player_data);
         // Run the schedule work once to update initial field of view.
-        world.insert_resource::<RunState>(RunState::WaitingForInput);
-        schedule.run(&mut world);
-        world.insert_resource::<RunState>(RunState::AiTurn);
+        world.insert_resource::<RunState>(RunState::Init);
 
         Self { world, schedule }
     }
 
     pub fn update(&mut self, input: Option<Input>) -> Update {
-        let run_state: &RunState = self.world.get_resource().unwrap();
+        let now = Instant::now();
+        let run_state: RunState = *self.world.get_resource().unwrap();
 
-        match run_state {
+        let new_state = match run_state {
+            RunState::Init => {
+                info!("Initializing");
+                self.schedule.run(&mut self.world);
+                self.world
+                    .insert_resource::<RunState>(RunState::WaitingForInput);
+                Update::Refresh
+            }
             RunState::WaitingForInput => {
                 if let Some(Input::Escape) = input {
                     Update::Exit
@@ -118,13 +140,24 @@ impl Game {
                 }
             }
             RunState::AiTurn => {
+                info!("Ai Turn");
                 self.schedule.run(&mut self.world);
                 self.world
                     .insert_resource::<RunState>(RunState::WaitingForInput);
                 Update::Refresh
             }
             RunState::PlayerTurn => Update::NoOp,
+        };
+
+        if run_state != RunState::WaitingForInput {
+            debug!(
+                "Update for state {:?} took {} µs.",
+                run_state,
+                now.elapsed().as_micros()
+            );
         }
+
+        new_state
     }
 
     fn try_move_player(&mut self, input: &Option<Input>) -> bool {
@@ -141,23 +174,26 @@ impl Game {
         let mut x = 0;
         let mut y = 0;
         let mut moved = false;
+
+        let player_entity: Entity = self.world.get_resource::<PlayerData>().unwrap().entity;
+
         self.world.resource_scope(|world, map: Mut<Map>| {
             world
-                .query_filtered::<&mut Position, With<Player>>()
-                .for_each_mut(world, |mut position| {
+                .query_filtered::<&Position, With<Player>>()
+                .for_each(world, |position| {
                     x = position.x + dx;
                     y = position.y + dy;
                     if map.is_walkable((x, y)) {
-                        position.x = x;
-                        position.y = y;
                         moved = true;
                     }
                 });
         });
         if moved {
-            if let Some(mut player_data) = self.world.get_resource_mut::<PlayerData>() {
-                player_data.position = Position::new(x, y);
-            }
+            self.world.spawn().insert(MoveAction {
+                entity: player_entity,
+                x,
+                y,
+            });
         }
 
         moved

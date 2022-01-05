@@ -1,7 +1,8 @@
 use anyhow::Result;
 use bevy_ecs::prelude::Mut;
 use tiefring::{
-    sprite::TileSet, text::Font, Canvas, CanvasSettings, Color, Graphics, Rect, SizeInPx,
+    sprite::{Sprite, TileSet},
+    Canvas, CanvasSettings, Color, Graphics, Rect, SizeInPx,
 };
 use winit::{
     dpi::LogicalSize,
@@ -12,14 +13,13 @@ use winit::{
 use winit_input_helper::WinitInputHelper;
 
 use crate::{
-    components::{Body, Position},
+    components::{Body, BodyType, Position},
     game::{Game, PlayerData, Update},
     inputs::Input,
     map::Map,
 };
 
 const TILE_SIZE: f32 = 32.0;
-const FONT_NAME: &str = "VT323-Regular.ttf";
 
 pub struct Engine {
     width: i32,
@@ -59,11 +59,6 @@ impl Engine {
             ))
         }?;
 
-        let fonts = find_folder::Search::ParentsThenKids(3, 3)
-            .for_folder("resources/fonts")
-            .unwrap();
-        let mut font = Font::load_font(fonts.join(FONT_NAME)).unwrap();
-
         let sprites = Sprites::new(&mut canvas);
 
         window.set_visible(true);
@@ -81,14 +76,7 @@ impl Engine {
 
                     canvas
                         .draw(|graphics| {
-                            render_game(
-                                &mut game,
-                                graphics,
-                                &mut font,
-                                &sprites,
-                                cell_count_x,
-                                cell_count_y,
-                            );
+                            render_game(&mut game, graphics, &sprites, cell_count_x, cell_count_y);
                         })
                         .unwrap();
                 } else {
@@ -167,7 +155,6 @@ impl Engine {
 fn render_game(
     game: &mut Game,
     graphics: &mut Graphics,
-    font: &mut Font,
     sprites: &Sprites,
     cell_count_x: i32,
     cell_count_y: i32,
@@ -213,7 +200,7 @@ fn render_game(
                 let mut query = world.query::<(&Body, &Position)>();
                 query.for_each(world, |(body, position)| {
                     if map.is_visible(position.x, position.y) {
-                        body.render(graphics, position, font);
+                        body.render(graphics, position, sprites);
                     }
                 });
             });
@@ -222,31 +209,16 @@ fn render_game(
 }
 
 impl Body {
-    fn render(&self, graphics: &mut Graphics, position: &Position, font: &mut Font) {
-        draw_char(self.char, self.color, graphics, position, font);
+    fn render(&self, graphics: &mut Graphics, position: &Position, sprites: &Sprites) {
+        let position =
+            tiefring::Position::new(position.x as f32 * TILE_SIZE, position.y as f32 * TILE_SIZE);
+        graphics.draw_sprite(sprites.sprite(&self.body_type), position);
     }
-}
-
-fn draw_char(
-    character: char,
-    color: Color,
-    graphics: &mut Graphics,
-    position: &Position,
-    font: &mut Font,
-) {
-    let position =
-        tiefring::Position::new(position.x as f32 * TILE_SIZE, position.y as f32 * TILE_SIZE);
-    graphics.draw_text(
-        font,
-        character.to_string(),
-        TILE_SIZE as u32,
-        position,
-        color,
-    );
 }
 
 struct Sprites {
     tiles: TileSet,
+    people: TileSet,
 }
 
 impl Sprites {
@@ -256,6 +228,15 @@ impl Sprites {
             .unwrap();
 
         let tiles = TileSet::load_image(canvas, sprites.join("tiles.png"), (32, 32)).unwrap();
-        Self { tiles }
+        let people = TileSet::load_image(canvas, sprites.join("chars.png"), (32, 32)).unwrap();
+        Self { tiles, people }
+    }
+
+    fn sprite(&self, character: &BodyType) -> &Sprite {
+        match character {
+            BodyType::Hero => self.people.sprite(0, 0),
+            BodyType::Orc => self.people.sprite(1, 0),
+            BodyType::Deer => self.people.sprite(2, 0),
+        }
     }
 }

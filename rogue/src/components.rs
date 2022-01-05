@@ -1,5 +1,3 @@
-use tiefring::Color;
-
 pub struct Name(pub String);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,14 +17,20 @@ impl Position {
 }
 
 pub struct Body {
-    pub char: char,
-    pub color: Color,
+    pub body_type: BodyType,
 }
 
 impl Body {
-    pub fn new(char: char, color: Color) -> Self {
-        Self { char, color }
+    pub fn new(body_type: BodyType) -> Self {
+        Self { body_type }
     }
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum BodyType {
+    Hero,
+    Orc,
+    Deer,
 }
 
 pub struct Player;
