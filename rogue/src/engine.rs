@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use anyhow::Result;
 use bevy_ecs::prelude::Mut;
 use tiefring::{
@@ -13,7 +15,7 @@ use winit::{
 use winit_input_helper::WinitInputHelper;
 
 use crate::{
-    components::{Body, BodyType, Position},
+    components::{Body, BodyType, Position, Solid},
     game::{Game, PlayerData, Update},
     inputs::Input,
     map::Map,
@@ -175,8 +177,11 @@ fn render_game(
                 let max_x = (min_x + cell_count_x).min(map.width);
                 let max_y = (min_y + cell_count_y).min(map.height);
 
-                for j in min_y..max_y {
-                    for i in min_x..max_x {
+                let x_range = min_x..max_x;
+                let y_range = min_y..max_y;
+
+                for j in y_range.clone() {
+                    for i in x_range.clone() {
                         let tile_index = map.tile_index_at_position(i, j).unwrap();
                         if map.is_revealed(i as i32, j as i32) {
                             let rect = Rect::from_xywh(
@@ -197,12 +202,26 @@ fn render_game(
                     }
                 }
 
-                let mut query = world.query::<(&Body, &Position)>();
-                query.for_each(world, |(body, position)| {
-                    if map.is_visible(position.x, position.y) {
-                        body.render(graphics, position, sprites);
+                let mut query = world.query::<(&Body, &Position, Option<&Solid>)>();
+                let mut bodies: Vec<_> = query.iter(world).collect();
+                bodies.sort_by(|a, b| {
+                    if a.2.is_some() {
+                        Ordering::Greater
+                    } else if b.2.is_some() {
+                        Ordering::Less
+                    } else {
+                        Ordering::Equal
                     }
                 });
+
+                for (body, position, _) in bodies {
+                    if x_range.contains(&position.x)
+                        && y_range.contains(&position.y)
+                        && map.is_visible(position.x, position.y)
+                    {
+                        body.render(graphics, position, sprites);
+                    }
+                }
             });
         },
     );

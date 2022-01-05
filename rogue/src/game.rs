@@ -205,7 +205,6 @@ impl Game {
 
         match attack_action {
             Some(attack_action) => {
-                println!("Attacking some monster");
                 self.world.spawn().insert(attack_action);
                 acted = true;
             }
