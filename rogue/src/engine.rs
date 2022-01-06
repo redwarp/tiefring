@@ -61,7 +61,7 @@ impl Engine {
             ))
         }?;
 
-        let sprites = Sprites::new(&mut canvas);
+        let renderer = Renderer::new(&mut canvas);
 
         window.set_visible(true);
 
@@ -72,13 +72,9 @@ impl Engine {
 
             if let Event::RedrawRequested(_) = event {
                 if redraw {
-                    let SizeInPx { width, height } = canvas.size();
-                    let cell_count_x = (width as f32 / TILE_SIZE).ceil() as i32;
-                    let cell_count_y = (height as f32 / TILE_SIZE).ceil() as i32;
-
                     canvas
                         .draw(|graphics| {
-                            render_game(&mut game, graphics, &sprites, cell_count_x, cell_count_y);
+                            renderer.render_game(&mut game, graphics);
                         })
                         .unwrap();
                 } else {
@@ -118,6 +114,89 @@ impl Engine {
             }
         });
     }
+}
+
+struct Renderer {
+    sprites: Sprites,
+}
+
+impl Renderer {
+    fn new(canvas: &mut Canvas) -> Self {
+        let sprites = Sprites::new(canvas);
+
+        Self { sprites }
+    }
+
+    fn render_game(&self, game: &mut Game, graphics: &mut Graphics) {
+        let SizeInPx { width, height } = graphics.size();
+        let cell_count_x = (width as f32 / TILE_SIZE).ceil() as i32;
+        let cell_count_y = (height as f32 / TILE_SIZE).ceil() as i32;
+
+        let (dx, dy) = Renderer::calculate_translation(game, graphics);
+        let translate_x = dx as f32 * TILE_SIZE;
+        let translate_y = dy as f32 * TILE_SIZE;
+
+        graphics.with_translation(
+            tiefring::Position {
+                x: translate_x,
+                y: translate_y,
+            },
+            |graphics| {
+                game.world.resource_scope(|world, map: Mut<Map>| {
+                    let min_x = (-dx).max(0);
+                    let min_y = (-dy).max(0);
+                    let max_x = (min_x + cell_count_x).min(map.width);
+                    let max_y = (min_y + cell_count_y).min(map.height);
+
+                    let x_range = min_x..max_x;
+                    let y_range = min_y..max_y;
+
+                    for j in y_range.clone() {
+                        for i in x_range.clone() {
+                            let tile_index = map.tile_index_at_position(i, j).unwrap();
+                            if map.is_revealed(i as i32, j as i32) {
+                                let rect = Rect::from_xywh(
+                                    i as f32 * TILE_SIZE,
+                                    j as f32 * TILE_SIZE,
+                                    TILE_SIZE,
+                                    TILE_SIZE,
+                                );
+                                graphics.draw_sprite_in_rect(
+                                    self.sprites.tiles.sprite_with_index(*tile_index),
+                                    rect,
+                                );
+
+                                if !map.is_visible(i as i32, j as i32) {
+                                    graphics.draw_rect(rect, Color::rgba(0.0, 0.0, 0.05, 0.8));
+                                }
+                            }
+                        }
+                    }
+
+                    let mut query = world.query::<(&Body, &Position, Option<&Solid>)>();
+                    let mut bodies: Vec<_> = query.iter(world).collect();
+                    bodies.sort_by(|a, b| {
+                        if a.2.is_some() {
+                            Ordering::Greater
+                        } else if b.2.is_some() {
+                            Ordering::Less
+                        } else {
+                            Ordering::Equal
+                        }
+                    });
+
+                    for (body, position, _) in bodies {
+                        if x_range.contains(&position.x)
+                            && y_range.contains(&position.y)
+                            && map.is_visible(position.x, position.y)
+                        {
+                            body.render(graphics, position, &self.sprites);
+                        }
+                    }
+                });
+            },
+        );
+    }
 
     fn calculate_translation(game: &Game, graphics: &Graphics) -> (i32, i32) {
         let map = game.world.get_resource::<Map>().unwrap();
@@ -152,79 +231,6 @@ impl Engine {
         };
         (dx, dy)
     }
-}
-
-fn render_game(
-    game: &mut Game,
-    graphics: &mut Graphics,
-    sprites: &Sprites,
-    cell_count_x: i32,
-    cell_count_y: i32,
-) {
-    let (dx, dy) = Engine::calculate_translation(game, graphics);
-    let translate_x = dx as f32 * TILE_SIZE;
-    let translate_y = dy as f32 * TILE_SIZE;
-
-    graphics.with_translation(
-        tiefring::Position {
-            x: translate_x,
-            y: translate_y,
-        },
-        |graphics| {
-            game.world.resource_scope(|world, map: Mut<Map>| {
-                let min_x = (-dx).max(0);
-                let min_y = (-dy).max(0);
-                let max_x = (min_x + cell_count_x).min(map.width);
-                let max_y = (min_y + cell_count_y).min(map.height);
-
-                let x_range = min_x..max_x;
-                let y_range = min_y..max_y;
-
-                for j in y_range.clone() {
-                    for i in x_range.clone() {
-                        let tile_index = map.tile_index_at_position(i, j).unwrap();
-                        if map.is_revealed(i as i32, j as i32) {
-                            let rect = Rect::from_xywh(
-                                i as f32 * TILE_SIZE,
-                                j as f32 * TILE_SIZE,
-                                TILE_SIZE,
-                                TILE_SIZE,
-                            );
-                            graphics.draw_sprite_in_rect(
-                                sprites.tiles.sprite_with_index(*tile_index),
-                                rect,
-                            );
-
-                            if !map.is_visible(i as i32, j as i32) {
-                                graphics.draw_rect(rect, Color::rgba(0.0, 0.0, 0.05, 0.8));
-                            }
-                        }
-                    }
-                }
-
-                let mut query = world.query::<(&Body, &Position, Option<&Solid>)>();
-                let mut bodies: Vec<_> = query.iter(world).collect();
-                bodies.sort_by(|a, b| {
-                    if a.2.is_some() {
-                        Ordering::Greater
-                    } else if b.2.is_some() {
-                        Ordering::Less
-                    } else {
-                        Ordering::Equal
-                    }
-                });
-
-                for (body, position, _) in bodies {
-                    if x_range.contains(&position.x)
-                        && y_range.contains(&position.y)
-                        && map.is_visible(position.x, position.y)
-                    {
-                        body.render(graphics, position, sprites);
-                    }
-                }
-            });
-        },
-    );
 }
 
 impl Body {

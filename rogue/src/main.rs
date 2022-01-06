@@ -5,6 +5,7 @@ use crate::game::Game;
 
 mod actions;
 mod components;
+mod effects;
 mod engine;
 mod game;
 mod inputs;

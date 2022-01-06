@@ -42,6 +42,7 @@ enum Stages {
     MapData,
     Monster,
     ResolveActions,
+    ApplyEffects,
     Cleanup,
 }
 
@@ -79,9 +80,15 @@ impl Game {
             )
             .add_stage_after(
                 Stages::ResolveActions,
+                Stages::ApplyEffects,
+                SystemStage::parallel().with_system(systems::health_effect.system()),
+            )
+            .add_stage_after(
+                Stages::ApplyEffects,
                 Stages::Cleanup,
                 SystemStage::parallel()
                     .with_system(systems::cleanup_actions.system())
+                    .with_system(systems::cleanup_effects.system())
                     .with_system(systems::death.system()),
             )
             .add_stage_after(

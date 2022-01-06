@@ -6,6 +6,7 @@ use torchbearer::path::PathMap;
 use crate::{
     actions::{AttackAction, MoveAction},
     components::{Health, Monster, MoveClose, MoveRandom, Name, Player, Position, Solid, Vision},
+    effects::HealthEffect,
     game::PlayerData,
     map::Map,
     spawner,
@@ -82,10 +83,25 @@ pub fn move_action(
     });
 }
 
-pub fn attack_action(attack_actions: Query<&AttackAction>, mut health_stats: Query<&mut Health>) {
+pub fn attack_action(
+    mut commands: Commands,
+    attack_actions: Query<&AttackAction>,
+    health_stats: Query<&Health>,
+) {
     attack_actions.for_each(|&AttackAction { entity: _, target }| {
-        if let Ok(mut health) = health_stats.get_mut(target) {
-            health.hp = (health.hp - 8).max(0);
+        if health_stats.get(target).is_ok() {
+            commands.spawn().insert(HealthEffect {
+                entity: target,
+                amount: -8,
+            });
+        }
+    });
+}
+
+pub fn health_effect(health_effects: Query<&HealthEffect>, mut health_stats: Query<&mut Health>) {
+    health_effects.for_each(|&HealthEffect { entity, amount }| {
+        if let Ok(mut health) = health_stats.get_mut(entity) {
+            health.hp = (health.hp + amount).max(0).min(health.max_hp);
         }
     });
 }
@@ -143,6 +159,10 @@ pub fn cleanup_actions(
 ) {
     move_query.for_each(|entity| commands.entity(entity).despawn());
     attack_query.for_each(|entity| commands.entity(entity).despawn());
+}
+
+pub fn cleanup_effects(mut commands: Commands, health_effects: Query<Entity, With<HealthEffect>>) {
+    health_effects.for_each(|entity| commands.entity(entity).despawn());
 }
 
 pub fn death(mut commands: Commands, health_stats: Query<(Entity, &Health, &Position, &Name)>) {
