@@ -1,9 +1,10 @@
-use std::cmp::Ordering;
+use std::{cell::RefCell, cmp::Ordering, rc::Rc};
 
 use anyhow::Result;
-use bevy_ecs::prelude::Mut;
+use bevy_ecs::prelude::{Entity, Mut, World};
 use tiefring::{
     sprite::{Sprite, TileSet},
+    text::Font,
     Canvas, CanvasSettings, Color, Graphics, Rect, SizeInPx,
 };
 use winit::{
@@ -15,7 +16,7 @@ use winit::{
 use winit_input_helper::WinitInputHelper;
 
 use crate::{
-    components::{Body, BodyType, Position, Solid},
+    components::{Body, BodyType, Health, Position, Solid},
     game::{Game, PlayerData, Update},
     inputs::Input,
     map::Map,
@@ -61,7 +62,7 @@ impl Engine {
             ))
         }?;
 
-        let renderer = Renderer::new(&mut canvas);
+        let mut renderer = Renderer::new(&mut canvas);
 
         window.set_visible(true);
 
@@ -72,6 +73,7 @@ impl Engine {
 
             if let Event::RedrawRequested(_) = event {
                 if redraw {
+                    renderer.update(&mut game);
                     canvas
                         .draw(|graphics| {
                             renderer.render_game(&mut game, graphics);
@@ -118,13 +120,28 @@ impl Engine {
 
 struct Renderer {
     sprites: Sprites,
+    hud: Hud,
 }
 
 impl Renderer {
     fn new(canvas: &mut Canvas) -> Self {
         let sprites = Sprites::new(canvas);
+        let fonts = find_folder::Search::ParentsThenKids(3, 3)
+            .for_folder("resources/fonts")
+            .unwrap();
+        let hud = {
+            let font = Rc::new(RefCell::new(
+                Font::load_font(fonts.join("VT323-Regular.ttf")).unwrap(),
+            ));
 
-        Self { sprites }
+            Hud::new(font)
+        };
+
+        Self { sprites, hud }
+    }
+
+    fn update(&mut self, game: &mut Game) {
+        self.hud.update(game);
     }
 
     fn render_game(&self, game: &mut Game, graphics: &mut Graphics) {
@@ -132,7 +149,7 @@ impl Renderer {
         let cell_count_x = (width as f32 / TILE_SIZE).ceil() as i32;
         let cell_count_y = (height as f32 / TILE_SIZE).ceil() as i32;
 
-        let (dx, dy) = Renderer::calculate_translation(game, graphics);
+        let (dx, dy) = Renderer::calculate_translation_in_tiles(game, graphics);
         let translate_x = dx as f32 * TILE_SIZE;
         let translate_y = dy as f32 * TILE_SIZE;
 
@@ -196,17 +213,20 @@ impl Renderer {
                 });
             },
         );
+
+        self.hud.render(graphics);
     }
 
-    fn calculate_translation(game: &Game, graphics: &Graphics) -> (i32, i32) {
+    fn calculate_translation_in_tiles(game: &Game, graphics: &Graphics) -> (i32, i32) {
         let map = game.world.get_resource::<Map>().unwrap();
         let map_width = map.width;
         let map_height = map.height;
 
-        let player_data = game.world.get_resource::<PlayerData>().unwrap();
-        let position = player_data.position;
-        let player_x = position.x;
-        let player_y = position.y;
+        let player_position = game
+            .world
+            .get_resource::<PlayerData>()
+            .expect("PlayerData is contained by world")
+            .position;
 
         let SizeInPx {
             width: canvas_width,
@@ -218,16 +238,16 @@ impl Renderer {
         let dx = if map_width < canvas_width {
             (canvas_width - map_width) / 2
         } else {
-            let dx = canvas_width / 2 - player_x;
+            let dx = canvas_width / 2 - player_position.x;
 
-            dx.min(0).max(canvas_width - map_width)
+            dx.clamp(canvas_width - map_width, 0)
         };
         let dy = if map_height < canvas_height {
             (canvas_height - map_height) / 2
         } else {
-            let dy = canvas_height / 2 - player_y;
+            let dy = canvas_height / 2 - player_position.y;
 
-            dy.min(0).max(canvas_height - map_height)
+            dy.clamp(canvas_height - map_height, 0)
         };
         (dx, dy)
     }
@@ -264,5 +284,113 @@ impl Sprites {
             BodyType::Deer => self.people.sprite(2, 0),
             BodyType::BonePile => self.people.sprite(0, 1),
         }
+    }
+}
+
+struct Hud {
+    health_bar: StatBar,
+}
+
+impl Hud {
+    fn new(font: Rc<RefCell<Font>>) -> Self {
+        let mut health_bar = StatBar::new("Health", 0, Color::rgb(0.8, 0.0, 0.0), font);
+        health_bar.current = 12;
+
+        Self { health_bar }
+    }
+
+    fn update(&mut self, game: &mut Game) {
+        let player_entity = game.world.player_entity();
+        let mut query = game.world.query::<&Health>();
+        if let Ok(health) = query.get(&game.world, player_entity) {
+            self.health_bar.update(health.hp, health.max_hp);
+        }
+    }
+
+    fn render(&self, graphics: &mut Graphics) {
+        self.health_bar.render(graphics, Position::new(0, 0));
+    }
+}
+
+struct StatBar {
+    name: String,
+    current: i32,
+    max: i32,
+    color: Color,
+    font: Rc<RefCell<Font>>,
+}
+
+impl StatBar {
+    fn new(name: &str, max: i32, color: Color, font: Rc<RefCell<Font>>) -> Self {
+        Self {
+            name: name.to_string(),
+            current: max,
+            max,
+            color,
+            font,
+        }
+    }
+
+    fn update(&mut self, current: i32, max: i32) {
+        self.current = current.max(0);
+        self.max = max;
+    }
+
+    fn render(&self, graphics: &mut Graphics, origin: Position) {
+        if self.max <= 0 {
+            return;
+        }
+
+        const WIDTH: f32 = 150.0;
+        const HEIGHT: f32 = 20.0;
+
+        let text = format!("{} ({}/{})", self.name, self.current, self.max);
+        let origin_x = origin.x as f32 * TILE_SIZE + 10.0;
+        let origin_y = origin.y as f32 * TILE_SIZE + 10.0;
+        let ratio = self.current as f32 / self.max as f32;
+        let rect = Rect::from_xywh(origin_x, origin_y, WIDTH * ratio, HEIGHT);
+
+        graphics.draw_rect(rect, self.color);
+
+        let rect = Rect::from_xywh(
+            origin_x + WIDTH * ratio,
+            origin_y,
+            WIDTH * (1.0 - ratio),
+            HEIGHT,
+        );
+
+        graphics.draw_rect(rect, darker(&self.color));
+
+        graphics.draw_text(
+            &mut self.font.borrow_mut(),
+            text,
+            HEIGHT as u32,
+            tiefring::Position::new(origin_x + WIDTH + 10.0, origin_y),
+            Color::rgb(1.0, 1.0, 1.0),
+        )
+    }
+}
+
+pub trait CommonData {
+    fn player_data(&self) -> &PlayerData;
+    fn player_entity(&self) -> Entity;
+}
+
+impl CommonData for World {
+    fn player_data(&self) -> &PlayerData {
+        self.get_resource::<PlayerData>().unwrap()
+    }
+
+    fn player_entity(&self) -> Entity {
+        self.get_resource::<PlayerData>().unwrap().entity
+    }
+}
+
+pub fn darker(color: &Color) -> Color {
+    Color {
+        a: color.a,
+        r: color.r * 0.75,
+        g: color.g * 0.75,
+        b: color.b * 0.75,
     }
 }
