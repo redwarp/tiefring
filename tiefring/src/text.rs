@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, fmt::Debug, fs, path::Path, rc::Rc};
 
-use fontdue::{LineMetrics, Metrics};
+use fontdue::layout::{Layout, TextStyle};
 use rect_packer::Packer;
 use wgpu::{
     util::DeviceExt, BindGroup, BindGroupLayout, Buffer, RenderPass, RenderPipeline, Sampler,
@@ -17,6 +17,7 @@ use crate::{
 pub(crate) struct DrawTextOperation {
     pub position: Position,
     pub font_for_px: Rc<RefCell<SizedFont>>,
+    pub layout: Rc<RefCell<Layout>>,
     pub text: String,
     pub color: Color,
 }
@@ -74,27 +75,8 @@ impl Font {
     }
 }
 
-enum CharType {
-    Regular,
-    WhiteSpace,
-    LineBreak,
-}
-
-impl CharType {
-    fn new(char: char) -> Self {
-        match char {
-            ' ' => CharType::WhiteSpace,
-            '\n' => CharType::LineBreak,
-            _ => CharType::Regular,
-        }
-    }
-}
-
 struct CharacterReference {
-    metrics: Metrics,
     tex_coords: Rect,
-    rect: Option<rect_packer::Rect>,
-    char_type: CharType,
 }
 
 pub(crate) struct SizedFont {
@@ -103,7 +85,6 @@ pub(crate) struct SizedFont {
     packer: Packer,
     font: Rc<fontdue::Font>,
     characters: HashMap<char, CharacterReference>,
-    horizontal_line_metrics: LineMetrics,
 }
 
 impl SizedFont {
@@ -116,9 +97,6 @@ impl SizedFont {
             rectangle_padding: 0,
         });
         let characters = HashMap::new();
-        let horizontal_line_metrics = font
-            .horizontal_line_metrics(px as f32)
-            .expect("We only handle horizontal fonts for now");
 
         Self {
             px,
@@ -126,7 +104,6 @@ impl SizedFont {
             packer,
             font,
             characters,
-            horizontal_line_metrics,
         }
     }
 
@@ -173,18 +150,13 @@ impl SizedFont {
 
         if metrics.width == 0 || metrics.height == 0 || bitmap.is_empty() {
             // A character without dimension, probably white space.
-
-            let char_type = CharType::new(char);
             let character = CharacterReference {
-                metrics,
                 tex_coords: Rect {
                     left: 0.0,
                     top: 0.0,
                     right: 0.0,
                     bottom: 0.0,
                 },
-                rect: None,
-                char_type,
             };
 
             self.characters.insert(char, character);
@@ -236,14 +208,8 @@ impl SizedFont {
                 right: packed.right() as f32 / 1024.0,
                 bottom: packed.bottom() as f32 / 1024.0,
             };
-            let char_type = CharType::new(char);
 
-            let character = CharacterReference {
-                metrics,
-                tex_coords,
-                rect: Some(packed),
-                char_type,
-            };
+            let character = CharacterReference { tex_coords };
 
             self.characters.insert(char, character);
             self.characters.get(&char)
@@ -484,68 +450,55 @@ impl TextRenderer {
             .get_or_create_texture(wgpu_context, text_context);
 
         for operation in draw_text_operations.operations.iter() {
-            let Position {
-                x: mut left,
-                y: mut top,
-            } = operation.position;
+            let color: [f32; 4] = operation.color.as_float_array();
+            let mut layout = operation.layout.borrow_mut();
+            let size = operation.font_for_px.borrow().px;
+            let fonts = &[operation.font_for_px.borrow().font.clone()];
+
+            let Position { x, y } = operation.position;
+            layout.reset(&fontdue::layout::LayoutSettings {
+                x,
+                y,
+                ..Default::default()
+            });
+            layout.append(
+                fonts,
+                &TextStyle::new(operation.text.as_str(), size as f32, 0),
+            );
             let mut font_for_px = operation.font_for_px.borrow_mut();
-            let ascent = font_for_px.horizontal_line_metrics.ascent;
-            let new_line_size = font_for_px.horizontal_line_metrics.new_line_size;
-            for char in operation.text.chars() {
-                let character =
-                    match font_for_px.get_or_create_character(char, wgpu_context, text_context) {
-                        Some(character) => character,
-                        None => continue,
-                    };
 
-                match character.char_type {
-                    CharType::WhiteSpace => {
-                        left += character.metrics.advance_width.round();
-                    }
-                    CharType::LineBreak => {
-                        left = operation.position.x;
-                        top += new_line_size;
-                    }
-                    CharType::Regular => {
-                        let rect = if let Some(rect) = character.rect {
-                            rect
-                        } else {
-                            continue;
-                        };
-                        let char_left = left + character.metrics.xmin as f32;
+            for glyph in layout.glyphs() {
+                let char_left = glyph.x;
+                let char_top = glyph.y;
+                let char_right = char_left + glyph.width as f32;
+                let char_bottom = char_top + glyph.height as f32;
 
-                        let char_top = top + ascent
-                            - character.metrics.height as f32
-                            - character.metrics.ymin as f32;
-                        let bottom = char_top + rect.height as f32;
-                        let right = char_left + rect.width as f32;
-                        let color: [f32; 4] = operation.color.as_float_array();
-
-                        vertices.push(TextVertex {
-                            position: [char_left, char_top],
-                            tex_coords: [character.tex_coords.left, character.tex_coords.top],
-                            color,
-                        });
-                        vertices.push(TextVertex {
-                            position: [char_left, bottom],
-                            tex_coords: [character.tex_coords.left, character.tex_coords.bottom],
-                            color,
-                        });
-                        vertices.push(TextVertex {
-                            position: [right, bottom],
-                            tex_coords: [character.tex_coords.right, character.tex_coords.bottom],
-                            color,
-                        });
-                        vertices.push(TextVertex {
-                            position: [right, char_top],
-                            tex_coords: [character.tex_coords.right, character.tex_coords.top],
-                            color,
-                        });
-
-                        left += character.metrics.advance_width as f32;
-                    }
+                if let Some(character) =
+                    font_for_px.get_or_create_character(glyph.parent, wgpu_context, text_context)
+                {
+                    vertices.push(TextVertex {
+                        position: [char_left, char_top],
+                        tex_coords: [character.tex_coords.left, character.tex_coords.top],
+                        color,
+                    });
+                    vertices.push(TextVertex {
+                        position: [char_left, char_bottom],
+                        tex_coords: [character.tex_coords.left, character.tex_coords.bottom],
+                        color,
+                    });
+                    vertices.push(TextVertex {
+                        position: [char_right, char_bottom],
+                        tex_coords: [character.tex_coords.right, character.tex_coords.bottom],
+                        color,
+                    });
+                    vertices.push(TextVertex {
+                        position: [char_right, char_top],
+                        tex_coords: [character.tex_coords.right, character.tex_coords.top],
+                        color,
+                    });
                 }
             }
+            layout.clear();
         }
 
         let indices: Vec<u16> = (0..vertices.len() / 4)

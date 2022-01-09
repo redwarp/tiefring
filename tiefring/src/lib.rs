@@ -1,6 +1,7 @@
-use std::path::Path;
+use std::{cell::RefCell, path::Path, rc::Rc};
 
 use camera::{Camera, CameraSettings};
+use fontdue::layout::{CoordinateSystem, Layout};
 use raw_window_handle::HasRawWindowHandle;
 use shape::{ColorRenderer, DrawRectOperation, DrawRectOperations};
 use sprite::{DrawTextureOperation, DrawTextureOperations, Sprite, TextureId, TextureRenderer};
@@ -332,6 +333,7 @@ pub struct Graphics {
     operation_blocks: Vec<OperationBlock>,
     size: SizeInPx,
     translation: Option<Position>,
+    layout: Rc<RefCell<Layout>>,
 }
 
 struct OperationBlock {
@@ -377,6 +379,7 @@ impl Graphics {
             operation_blocks: Vec::new(),
             size: SizeInPx { width, height },
             translation: None,
+            layout: Rc::new(RefCell::new(Layout::new(CoordinateSystem::PositiveYDown))),
         }
     }
 
@@ -416,14 +419,16 @@ impl Graphics {
             });
     }
 
-    pub fn draw_text<T: Into<String>>(
+    pub fn draw_text<T>(
         &mut self,
         font: &mut Font,
         text: T,
         px: u32,
         position: Position,
         color: Color,
-    ) {
+    ) where
+        T: Into<String>,
+    {
         let position = if let Some(translation) = self.translation {
             position.translated(translation.x, translation.y)
         } else {
@@ -431,12 +436,14 @@ impl Graphics {
         };
         let text: String = text.into();
         let font_for_px = font.get_font_for_px(px);
+        let layout = self.layout.clone();
         self.get_operation_block(DrawOperationType::Text(FontId(font.font.file_hash(), px)))
             .push_draw_text_operation(DrawTextOperation {
                 font_for_px,
                 position,
                 text,
                 color,
+                layout,
             });
     }
 

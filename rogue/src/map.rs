@@ -408,7 +408,7 @@ mod tests {
         let tiles = vec![Tile::wall(); 9];
 
         let map_representation = MapRepresentation::new(3, 3, &tiles);
-        assert_eq!(map_representation.tiles_index, [7, 7, 7, 7, 7, 7, 7, 7, 7]);
+        assert_eq!(map_representation.tiles_index, [5, 5, 5, 5, 5, 5, 5, 5, 5]);
     }
 
     #[test]
@@ -428,7 +428,7 @@ mod tests {
         let map_representation = MapRepresentation::new(3, 3, &tiles);
         assert_eq!(
             map_representation.tiles_index,
-            [7, 7, 7, 10, 10, 10, 5, 5, 5]
+            [5, 5, 5, 8, 8, 8, 46, 46, 46]
         );
     }
 
