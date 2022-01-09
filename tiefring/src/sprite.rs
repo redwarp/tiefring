@@ -5,26 +5,12 @@ use wgpu::{
     SamplerBindingType,
 };
 
-use crate::{camera::Camera, Canvas, Rect, SizeInPx, WgpuContext};
+use crate::{camera::Camera, Canvas, DrawData, Rect, SizeInPx, WgpuContext};
 
 pub(crate) struct DrawTextureOperation {
     pub tex_coords: Rect,
     pub destination: Rect,
     pub texture: Rc<Texture>,
-}
-
-pub(crate) struct DrawTextureOperations {
-    pub operations: Vec<DrawTextureOperation>,
-    buffers: Option<(Rc<Texture>, Buffer, Buffer, Vec<u16>)>,
-}
-
-impl DrawTextureOperations {
-    pub fn new() -> Self {
-        Self {
-            operations: Vec::new(),
-            buffers: None,
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -408,17 +394,32 @@ impl TextureRenderer {
     pub(crate) fn render<'a>(
         &'a self,
         render_pass: &mut RenderPass<'a>,
-        context: &'a WgpuContext,
         camera: &'a Camera,
-        draw_texture_operations: &'a mut DrawTextureOperations,
+        vertex_buffer: &'a Buffer,
+        index_buffer: &'a Buffer,
+        count: u32,
+        texture: &'a Texture,
     ) {
-        let texture = match draw_texture_operations.operations.first() {
-            Some(operation) => operation.texture.clone(),
-            None => return,
-        };
+        render_pass.set_pipeline(&self.render_pipeline);
+        render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);
+        render_pass.set_bind_group(1, &texture.texture_bind_group, &[]);
+        render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+        render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        render_pass.draw_indexed(0..count, 0, 0..1);
+    }
+
+    pub fn prepare_renderering(
+        &self,
+        wgpu_context: &WgpuContext,
+        draw_texture_operations: &[DrawTextureOperation],
+    ) -> DrawData {
+        let texture = draw_texture_operations
+            .first()
+            .expect("We have operations")
+            .texture
+            .clone();
 
         let vertices: Vec<_> = draw_texture_operations
-            .operations
             .iter()
             .flat_map(|operation| {
                 [
@@ -442,38 +443,36 @@ impl TextureRenderer {
             })
             .collect();
 
-        let indices: Vec<u16> = (0..draw_texture_operations.operations.len())
+        let indices: Vec<u16> = (0..draw_texture_operations.len())
             .flat_map(|index| {
                 let step: u16 = index as u16 * 4;
                 [step, step + 1, step + 2, step + 2, step + 3, step]
             })
             .collect();
 
-        let vertex_buffer = context
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(&vertices[..]),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-        let index_buffer = context
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Index Buffer"),
-                contents: bytemuck::cast_slice(&indices[..]),
-                usage: wgpu::BufferUsages::INDEX,
-            });
+        let vertex_buffer =
+            wgpu_context
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Vertex Buffer"),
+                    contents: bytemuck::cast_slice(&vertices[..]),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
+        let index_buffer =
+            wgpu_context
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Index Buffer"),
+                    contents: bytemuck::cast_slice(&indices[..]),
+                    usage: wgpu::BufferUsages::INDEX,
+                });
 
-        let (texture, vertex_buffer, index_buffer, indices) = draw_texture_operations
-            .buffers
-            .insert((texture, vertex_buffer, index_buffer, indices));
-
-        let indice_count = indices.len() as u32;
-        render_pass.set_pipeline(&self.render_pipeline);
-        render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);
-        render_pass.set_bind_group(1, &texture.texture_bind_group, &[]);
-        render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-        render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-        render_pass.draw_indexed(0..indice_count, 0, 0..1);
+        let count = indices.len() as u32;
+        DrawData::Texture {
+            texture,
+            vertex_buffer,
+            index_buffer,
+            count,
+        }
     }
 }

@@ -3,11 +3,11 @@ use std::{cell::RefCell, path::Path, rc::Rc};
 use camera::{Camera, CameraSettings};
 use fontdue::layout::{CoordinateSystem, Layout};
 use raw_window_handle::HasRawWindowHandle;
-use shape::{ColorRenderer, DrawRectOperation, DrawRectOperations};
-use sprite::{DrawTextureOperation, DrawTextureOperations, Sprite, TextureId, TextureRenderer};
-use text::{DrawTextOperation, DrawTextOperations, Font, FontId, TextContext, TextRenderer};
+use shape::{ColorRenderer, DrawRectOperation};
+use sprite::{DrawTextureOperation, Sprite, Texture, TextureId, TextureRenderer};
+use text::{DrawTextOperation, Font, FontId, TextContext, TextRenderer};
 use thiserror::Error;
-use wgpu::{CommandEncoder, RenderPass};
+use wgpu::{Buffer, CommandEncoder, RenderPass};
 
 mod camera;
 mod shape;
@@ -32,6 +32,7 @@ pub struct Canvas {
     pub(crate) canvas_settings: CanvasSettings,
     text_context: TextContext,
     text_renderer: TextRenderer,
+    draw_data: Vec<DrawData>,
 }
 
 impl Canvas {
@@ -59,6 +60,8 @@ impl Canvas {
         let texture_renderer = TextureRenderer::new(&wgpu_context, &camera);
         let text_context = TextContext::new(&wgpu_context);
         let text_renderer = TextRenderer::new(&wgpu_context, &text_context, &camera);
+        let draw_data = vec![];
+
         Ok(Canvas {
             wgpu_context,
             graphics,
@@ -68,6 +71,7 @@ impl Canvas {
             canvas_settings,
             text_context,
             text_renderer,
+            draw_data,
         })
     }
 
@@ -112,7 +116,9 @@ impl Canvas {
                 depth_stencil_attachment: None,
             });
 
-            self.handle_draw_operations(&mut render_pass);
+            // self.handle_draw_operations(&mut render_pass);
+            self.prepare_draw_operations();
+            self.handle_draw_operations(&mut render_pass)
         }
 
         encoder.copy_texture_to_texture(
@@ -282,27 +288,75 @@ impl Canvas {
         Ok(())
     }
 
-    fn handle_draw_operations<'a>(&'a mut self, render_pass: &mut RenderPass<'a>) {
-        for operation_block in self.graphics.operation_blocks.iter_mut() {
+    fn prepare_draw_operations(&mut self) {
+        let draw_data = &mut self.draw_data;
+        draw_data.clear();
+        for operation_block in &self.graphics.operation_blocks {
             match operation_block.operation_type {
-                DrawOperationType::Rect => self.color_renderer.render(
+                DrawOperationType::Rect => {
+                    draw_data.push(self.color_renderer.prepare_renderering(
+                        &self.wgpu_context,
+                        &operation_block.draw_rect_operations,
+                    ));
+                }
+                DrawOperationType::Texture(_) => {
+                    draw_data.push(self.texture_renderer.prepare_renderering(
+                        &self.wgpu_context,
+                        &operation_block.draw_texture_operations,
+                    ));
+                }
+                DrawOperationType::Text(_) => {
+                    if let Some(draw_text) = self.text_renderer.prepare_renderering(
+                        &self.wgpu_context,
+                        &self.text_context,
+                        &operation_block.draw_text_operations,
+                    ) {
+                        draw_data.push(draw_text)
+                    }
+                }
+            }
+        }
+    }
+
+    fn handle_draw_operations<'a>(&'a self, render_pass: &mut RenderPass<'a>) {
+        for draw_data in &self.draw_data {
+            match draw_data {
+                DrawData::Color {
+                    vertex_buffer,
+                    index_buffer,
+                    count,
+                } => self.color_renderer.render(
                     render_pass,
-                    &self.wgpu_context,
                     &self.camera,
-                    &mut operation_block.draw_rect_operations,
+                    vertex_buffer,
+                    index_buffer,
+                    *count,
                 ),
-                DrawOperationType::Texture(_) => self.texture_renderer.render(
+                DrawData::Texture {
+                    vertex_buffer,
+                    index_buffer,
+                    count,
+                    texture,
+                } => self.texture_renderer.render(
                     render_pass,
-                    &self.wgpu_context,
                     &self.camera,
-                    &mut operation_block.draw_texture_operations,
+                    vertex_buffer,
+                    index_buffer,
+                    *count,
+                    texture,
                 ),
-                DrawOperationType::Text(_) => self.text_renderer.render(
+                DrawData::Text {
+                    vertex_buffer,
+                    index_buffer,
+                    count,
+                    texture,
+                } => self.text_renderer.render(
                     render_pass,
-                    &self.wgpu_context,
-                    &self.text_context,
                     &self.camera,
-                    &mut operation_block.draw_text_operations,
+                    vertex_buffer,
+                    index_buffer,
+                    *count,
+                    texture,
                 ),
             }
         }
@@ -338,38 +392,52 @@ pub struct Graphics {
 
 struct OperationBlock {
     operation_type: DrawOperationType,
-    draw_rect_operations: DrawRectOperations,
-    draw_texture_operations: DrawTextureOperations,
-    draw_text_operations: DrawTextOperations,
+    draw_rect_operations: Vec<DrawRectOperation>,
+    draw_texture_operations: Vec<DrawTextureOperation>,
+    draw_text_operations: Vec<DrawTextOperation>,
 }
 
 impl OperationBlock {
     fn new(operation_type: DrawOperationType) -> Self {
         OperationBlock {
             operation_type,
-            draw_rect_operations: DrawRectOperations::new(),
-            draw_texture_operations: DrawTextureOperations::new(),
-            draw_text_operations: DrawTextOperations::new(),
+            draw_rect_operations: vec![],
+            draw_texture_operations: vec![],
+            draw_text_operations: vec![],
         }
     }
 
     fn push_draw_text_operation(&mut self, draw_text_operation: DrawTextOperation) {
-        self.draw_text_operations
-            .operations
-            .push(draw_text_operation);
+        self.draw_text_operations.push(draw_text_operation);
     }
 
     fn push_draw_rect_operation(&mut self, draw_rect_operation: DrawRectOperation) {
-        self.draw_rect_operations
-            .operations
-            .push(draw_rect_operation);
+        self.draw_rect_operations.push(draw_rect_operation);
     }
 
     fn push_draw_texture_operation(&mut self, draw_texture_operation: DrawTextureOperation) {
-        self.draw_texture_operations
-            .operations
-            .push(draw_texture_operation);
+        self.draw_texture_operations.push(draw_texture_operation);
     }
+}
+
+enum DrawData {
+    Color {
+        vertex_buffer: Buffer,
+        index_buffer: Buffer,
+        count: u32,
+    },
+    Texture {
+        vertex_buffer: Buffer,
+        index_buffer: Buffer,
+        count: u32,
+        texture: Rc<Texture>,
+    },
+    Text {
+        vertex_buffer: Buffer,
+        index_buffer: Buffer,
+        count: u32,
+        texture: Rc<Texture>,
+    },
 }
 
 impl Graphics {

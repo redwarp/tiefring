@@ -11,7 +11,7 @@ use crate::{
     camera::Camera,
     sprite::Texture,
     sprite::{TextureId, TEXTURE_INDEX},
-    Color, Position, Rect, WgpuContext,
+    Color, DrawData, Position, Rect, WgpuContext,
 };
 
 pub(crate) struct DrawTextOperation {
@@ -20,20 +20,6 @@ pub(crate) struct DrawTextOperation {
     pub layout: Rc<RefCell<Layout>>,
     pub text: String,
     pub color: Color,
-}
-
-pub(crate) struct DrawTextOperations {
-    pub operations: Vec<DrawTextOperation>,
-    buffers: Option<(Rc<Texture>, Buffer, Buffer)>,
-}
-
-impl DrawTextOperations {
-    pub fn new() -> Self {
-        Self {
-            operations: Vec::new(),
-            buffers: None,
-        }
-    }
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, Debug)]
@@ -421,35 +407,31 @@ impl TextRenderer {
         TextRenderer { render_pipeline }
     }
 
-    pub(crate) fn render<'a>(
-        &'a self,
-        render_pass: &mut RenderPass<'a>,
-        wgpu_context: &'a WgpuContext,
-        text_context: &'a TextContext,
-        camera: &'a Camera,
-        draw_text_operations: &'a mut DrawTextOperations,
-    ) {
+    pub fn prepare_renderering(
+        &self,
+        wgpu_context: &WgpuContext,
+        text_context: &TextContext,
+        draw_text_operations: &[DrawTextOperation],
+    ) -> Option<DrawData> {
         let char_count: usize = draw_text_operations
-            .operations
             .iter()
             .map(|operation| operation.text.len())
             .sum();
 
         if char_count == 0 {
-            return;
+            return None;
         }
 
         let mut vertices: Vec<TextVertex> = Vec::with_capacity(char_count * 4);
 
         let texture = draw_text_operations
-            .operations
             .first()
             .expect("We have at last one operation, or char_count would be 0")
             .font_for_px
             .borrow_mut()
             .get_or_create_texture(wgpu_context, text_context);
 
-        for operation in draw_text_operations.operations.iter() {
+        for operation in draw_text_operations.iter() {
             let color: [f32; 4] = operation.color.as_float_array();
             let mut layout = operation.layout.borrow_mut();
             let size = operation.font_for_px.borrow().px;
@@ -525,17 +507,30 @@ impl TextRenderer {
                     usage: wgpu::BufferUsages::INDEX,
                 });
 
-        let (texture, vertex_buffer, index_buffer) =
-            draw_text_operations
-                .buffers
-                .insert((texture, vertex_buffer, index_buffer));
+        let count = indices.len() as u32;
 
-        let indice_count = indices.len() as u32;
+        Some(DrawData::Text {
+            vertex_buffer,
+            index_buffer,
+            count,
+            texture,
+        })
+    }
+
+    pub(crate) fn render<'a>(
+        &'a self,
+        render_pass: &mut RenderPass<'a>,
+        camera: &'a Camera,
+        vertex_buffer: &'a Buffer,
+        index_buffer: &'a Buffer,
+        count: u32,
+        texture: &'a Texture,
+    ) {
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);
         render_pass.set_bind_group(1, &texture.texture_bind_group, &[]);
         render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
         render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-        render_pass.draw_indexed(0..indice_count, 0, 0..1);
+        render_pass.draw_indexed(0..count, 0, 0..1);
     }
 }

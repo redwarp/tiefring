@@ -1,22 +1,8 @@
 use wgpu::{util::DeviceExt, Buffer, RenderPass, RenderPipeline};
 
-use crate::{camera::Camera, Color, Rect, WgpuContext};
+use crate::{camera::Camera, Color, DrawData, Rect, WgpuContext};
 
 pub(crate) struct DrawRectOperation(pub Rect, pub Color);
-
-pub(crate) struct DrawRectOperations {
-    pub operations: Vec<DrawRectOperation>,
-    buffers: Option<(Buffer, Buffer)>,
-}
-
-impl DrawRectOperations {
-    pub fn new() -> Self {
-        Self {
-            operations: Vec::new(),
-            buffers: None,
-        }
-    }
-}
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -111,18 +97,15 @@ impl ColorRenderer {
                     multiview: None,
                 });
 
-        ColorRenderer { render_pipeline }
+        Self { render_pipeline }
     }
 
-    pub(crate) fn render<'a>(
-        &'a self,
-        render_pass: &mut RenderPass<'a>,
-        context: &WgpuContext,
-        camera: &'a Camera,
-        draw_rect_operations: &'a mut DrawRectOperations,
-    ) {
+    pub fn prepare_renderering(
+        &self,
+        wgpu_context: &WgpuContext,
+        draw_rect_operations: &[DrawRectOperation],
+    ) -> DrawData {
         let vertices: Vec<_> = draw_rect_operations
-            .operations
             .iter()
             .flat_map(|&DrawRectOperation(rect, color)| {
                 let color: [f32; 4] = color.as_float_array();
@@ -147,33 +130,45 @@ impl ColorRenderer {
             })
             .collect();
 
-        let indices: Vec<u16> = (0..draw_rect_operations.operations.len())
+        let indices: Vec<u16> = (0..draw_rect_operations.len())
             .flat_map(|index| {
                 let step: u16 = index as u16 * 4;
                 [step, step + 1, step + 2, step + 2, step + 3, step]
             })
             .collect();
 
-        let vertex_buffer = context
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(&vertices[..]),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-        let index_buffer = context
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Index Buffer"),
-                contents: bytemuck::cast_slice(&indices[..]),
-                usage: wgpu::BufferUsages::INDEX,
-            });
+        let vertex_buffer =
+            wgpu_context
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Vertex Buffer"),
+                    contents: bytemuck::cast_slice(&vertices[..]),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
+        let index_buffer =
+            wgpu_context
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Index Buffer"),
+                    contents: bytemuck::cast_slice(&indices[..]),
+                    usage: wgpu::BufferUsages::INDEX,
+                });
 
-        let (vertex_buffer, index_buffer) = draw_rect_operations
-            .buffers
-            .insert((vertex_buffer, index_buffer));
+        DrawData::Color {
+            vertex_buffer,
+            index_buffer,
+            count: indices.len() as u32,
+        }
+    }
 
-        let count = indices.len() as u32;
+    pub(crate) fn render<'a>(
+        &'a self,
+        render_pass: &mut RenderPass<'a>,
+        camera: &'a Camera,
+        vertex_buffer: &'a Buffer,
+        index_buffer: &'a Buffer,
+        count: u32,
+    ) {
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);
         render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
