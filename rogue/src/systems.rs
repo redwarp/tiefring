@@ -16,7 +16,7 @@ use crate::{
 pub fn move_random(
     mut commands: Commands,
     mut rng: ResMut<StdRng>,
-    query: Query<(Entity, &Position), With<MoveRandom>>,
+    mut query: Query<(Entity, &Position), With<MoveRandom>>,
 ) {
     query.for_each_mut(|(entity, position)| {
         let direction = rng.gen_range(0..4);
@@ -106,7 +106,7 @@ pub fn health_effect(health_effects: Query<&HealthEffect>, mut health_stats: Que
     });
 }
 
-pub fn field_of_view(map: Res<Map>, query: Query<(&mut Vision, &Position), Changed<Position>>) {
+pub fn field_of_view(map: Res<Map>, mut query: Query<(&mut Vision, &Position), Changed<Position>>) {
     query.for_each_mut(|(mut field_of_view, position)| {
         field_of_view.visible_positions = torchbearer::fov::field_of_view(
             &*map,

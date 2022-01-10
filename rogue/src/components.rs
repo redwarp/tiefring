@@ -1,6 +1,9 @@
+use bevy_ecs::prelude::Component;
+
+#[derive(Component)]
 pub struct Name(pub String);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Component)]
 pub struct Position {
     pub x: i32,
     pub y: i32,
@@ -17,6 +20,7 @@ impl Position {
     }
 }
 
+#[derive(Component)]
 pub struct Body {
     pub body_type: BodyType,
 }
@@ -35,14 +39,19 @@ pub enum BodyType {
     BonePile,
 }
 
+#[derive(Component)]
 pub struct Player;
 
+#[derive(Component)]
 pub struct Monster;
 
+#[derive(Component)]
 pub struct MoveRandom;
 
+#[derive(Component)]
 pub struct MoveClose;
 
+#[derive(Component)]
 pub struct Vision {
     pub visible_positions: Vec<Position>,
     pub view_distance: i32,
@@ -57,8 +66,10 @@ impl Vision {
     }
 }
 
+#[derive(Component)]
 pub struct Solid;
 
+#[derive(Component)]
 pub struct Health {
     pub hp: i32,
     pub max_hp: i32,

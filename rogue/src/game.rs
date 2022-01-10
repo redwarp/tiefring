@@ -66,44 +66,44 @@ impl Game {
             .add_stage(
                 Stages::Monster,
                 SystemStage::parallel()
-                    .with_run_criteria(ai_turn.system())
-                    .with_system(systems::move_random.system())
-                    .with_system(systems::move_to_player.system())
-                    .with_system(systems::insult.system()),
+                    .with_run_criteria(ai_turn)
+                    .with_system(systems::move_random)
+                    .with_system(systems::move_to_player)
+                    .with_system(systems::insult),
             )
             .add_stage_after(
                 Stages::Monster,
                 Stages::ResolveActions,
                 SystemStage::parallel()
-                    .with_system(systems::move_action.system())
-                    .with_system(systems::attack_action.system()),
+                    .with_system(systems::move_action)
+                    .with_system(systems::attack_action),
             )
             .add_stage_after(
                 Stages::ResolveActions,
                 Stages::ApplyEffects,
-                SystemStage::parallel().with_system(systems::health_effect.system()),
+                SystemStage::parallel().with_system(systems::health_effect),
             )
             .add_stage_after(
                 Stages::ApplyEffects,
                 Stages::Cleanup,
                 SystemStage::parallel()
-                    .with_system(systems::cleanup_actions.system())
-                    .with_system(systems::cleanup_effects.system())
-                    .with_system(systems::death.system()),
+                    .with_system(systems::cleanup_actions)
+                    .with_system(systems::cleanup_effects)
+                    .with_system(systems::death),
             )
             .add_stage_after(
                 Stages::Cleanup,
                 Stages::MapData,
                 SystemStage::parallel()
-                    .with_system(systems::update_blocked.system())
-                    .with_system(systems::update_player_position.system()),
+                    .with_system(systems::update_blocked)
+                    .with_system(systems::update_player_position),
             )
             .add_stage_after(
                 Stages::MapData,
                 Stages::Vision,
                 SystemStage::parallel()
-                    .with_system(systems::field_of_view.system().label(Systems::FieldOfView))
-                    .with_system(systems::update_visible.system().after(Systems::FieldOfView)),
+                    .with_system(systems::field_of_view.label(Systems::FieldOfView))
+                    .with_system(systems::update_visible.after(Systems::FieldOfView)),
             );
 
         let mut world = World::new();
