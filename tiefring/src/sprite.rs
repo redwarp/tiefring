@@ -3,9 +3,9 @@ use std::{path::Path, rc::Rc, sync::atomic::AtomicUsize};
 use wgpu::{BindGroup, BindGroupLayout, RenderPass, RenderPipeline, Sampler, SamplerBindingType};
 
 use crate::{
-    cache::{BufferCache, ReusableBuffer},
+    cache::{BufferCache, Resetable, ReusableBuffer},
     camera::Camera,
-    Canvas, DrawData, Rect, SizeInPx, WgpuContext,
+    Canvas, DrawData, DrawDataPreper, Rect, SizeInPx, WgpuContext,
 };
 
 pub(crate) struct DrawTextureOperation {
@@ -284,7 +284,6 @@ pub(crate) struct TextureRenderer {
     render_pipeline: RenderPipeline,
     pub(crate) sampler: Sampler,
     pub(crate) texture_bind_group_layout: BindGroupLayout,
-    vertices: Vec<TextureVertex>,
 }
 
 impl TextureRenderer {
@@ -386,13 +385,10 @@ impl TextureRenderer {
             ..Default::default()
         });
 
-        let vertices = Vec::new();
-
         TextureRenderer {
             render_pipeline,
             sampler,
             texture_bind_group_layout,
-            vertices,
         }
     }
 
@@ -415,22 +411,40 @@ impl TextureRenderer {
         );
         render_pass.draw_indexed(0..count, 0, 0..1);
     }
+}
 
-    pub fn prepare_renderering(
+pub(crate) struct TextureDataPreper {
+    vertices: Vec<TextureVertex>,
+    indices: Vec<u16>,
+}
+
+impl TextureDataPreper {
+    pub fn new() -> Self {
+        Self {
+            vertices: vec![],
+            indices: vec![],
+        }
+    }
+}
+
+impl DrawDataPreper<DrawTextureOperation, &WgpuContext> for TextureDataPreper {
+    fn prepare(
         &mut self,
         buffer_cache: &mut BufferCache,
-        wgpu_context: &WgpuContext,
-        draw_texture_operations: &[DrawTextureOperation],
-    ) -> DrawData {
-        let texture = draw_texture_operations
+        context: &WgpuContext,
+        operations: &[DrawTextureOperation],
+    ) -> Option<DrawData> {
+        let texture = operations
             .first()
             .expect("We have operations")
             .texture
             .clone();
 
+        let capacity = operations.len() * 4;
+
         let vertices = &mut self.vertices;
-        unsafe { vertices.set_len(0) };
-        vertices.extend(draw_texture_operations.iter().flat_map(|operation| {
+        vertices.reset_with_capacity(capacity);
+        vertices.extend(operations.iter().flat_map(|operation| {
             [
                 TextureVertex {
                     position: [operation.destination.left, operation.destination.top],
@@ -451,31 +465,31 @@ impl TextureRenderer {
             ]
         }));
 
-        let indices: Vec<u16> = (0..draw_texture_operations.len())
-            .flat_map(|index| {
-                let step: u16 = index as u16 * 4;
-                [step, step + 1, step + 2, step + 2, step + 3, step]
-            })
-            .collect();
+        let indices = &mut self.indices;
+        indices.reset_with_capacity(capacity);
+        indices.extend((0..operations.len()).flat_map(|index| {
+            let step: u16 = index as u16 * 4;
+            [step, step + 1, step + 2, step + 2, step + 3, step]
+        }));
 
         let vertex_buffer = buffer_cache.get_buffer(
-            wgpu_context,
+            context,
             bytemuck::cast_slice(&vertices[..]),
             wgpu::BufferUsages::VERTEX,
         );
 
         let index_buffer = buffer_cache.get_buffer(
-            wgpu_context,
+            context,
             bytemuck::cast_slice(&indices[..]),
             wgpu::BufferUsages::INDEX,
         );
 
         let count = indices.len() as u32;
-        DrawData::Texture {
+        Some(DrawData::Texture {
             texture,
             vertex_buffer,
             index_buffer,
             count,
-        }
+        })
     }
 }

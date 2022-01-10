@@ -1,9 +1,9 @@
 use wgpu::{RenderPass, RenderPipeline};
 
 use crate::{
-    cache::{BufferCache, ReusableBuffer},
+    cache::{BufferCache, Resetable, ReusableBuffer},
     camera::Camera,
-    Color, DrawData, Rect, WgpuContext,
+    Color, DrawData, DrawDataPreper, Rect, WgpuContext,
 };
 
 pub(crate) struct DrawRectOperation(pub Rect, pub Color);
@@ -38,7 +38,6 @@ impl ColorVertex {
 
 pub(crate) struct ColorRenderer {
     render_pipeline: RenderPipeline,
-    vertices: Vec<ColorVertex>,
 }
 
 impl ColorRenderer {
@@ -102,26 +101,56 @@ impl ColorRenderer {
                     multiview: None,
                 });
 
-        let vertices = Vec::new();
-
-        Self {
-            render_pipeline,
-            vertices,
-        }
+        Self { render_pipeline }
     }
 
-    pub fn prepare_renderering(
+    pub(crate) fn render<'a>(
+        &'a self,
+        render_pass: &mut RenderPass<'a>,
+        camera: &'a Camera,
+        vertex_buffer: &'a ReusableBuffer,
+        index_buffer: &'a ReusableBuffer,
+        count: u32,
+    ) {
+        render_pass.set_pipeline(&self.render_pipeline);
+        render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);
+        render_pass.set_vertex_buffer(0, vertex_buffer.buffer.slice(..vertex_buffer.current_size));
+        render_pass.set_index_buffer(
+            index_buffer.buffer.slice(..vertex_buffer.current_size),
+            wgpu::IndexFormat::Uint16,
+        );
+        render_pass.draw_indexed(0..count, 0, 0..1);
+    }
+}
+
+pub struct ColorDataPreper {
+    vertices: Vec<ColorVertex>,
+    indices: Vec<u16>,
+}
+
+impl ColorDataPreper {
+    pub fn new() -> Self {
+        Self {
+            vertices: vec![],
+            indices: vec![],
+        }
+    }
+}
+
+impl DrawDataPreper<DrawRectOperation, &WgpuContext> for ColorDataPreper {
+    fn prepare(
         &mut self,
         buffer_cache: &mut BufferCache,
-        wgpu_context: &WgpuContext,
-        draw_rect_operations: &[DrawRectOperation],
-    ) -> DrawData {
+        context: &WgpuContext,
+        operations: &[DrawRectOperation],
+    ) -> Option<DrawData> {
         let vertices = &mut self.vertices;
-        unsafe { vertices.set_len(0) };
-        vertices.reserve(draw_rect_operations.len() * 4);
+        let capacity = operations.len() * 4;
+
+        vertices.reset_with_capacity(capacity);
 
         vertices.extend(
-            draw_rect_operations
+            operations
                 .iter()
                 .flat_map(|&DrawRectOperation(rect, color)| {
                     let color: [f32; 4] = color.as_float_array();
@@ -146,47 +175,29 @@ impl ColorRenderer {
                 }),
         );
 
-        let indices: Vec<u16> = (0..draw_rect_operations.len())
-            .flat_map(|index| {
-                let step: u16 = index as u16 * 4;
-                [step, step + 1, step + 2, step + 2, step + 3, step]
-            })
-            .collect();
+        let indices = &mut self.indices;
+        indices.reset_with_capacity(capacity);
+        indices.extend((0..operations.len()).flat_map(|index| {
+            let step: u16 = index as u16 * 4;
+            [step, step + 1, step + 2, step + 2, step + 3, step]
+        }));
 
         let vertex_buffer = buffer_cache.get_buffer(
-            wgpu_context,
+            context,
             bytemuck::cast_slice(&vertices[..]),
             wgpu::BufferUsages::VERTEX,
         );
 
         let index_buffer = buffer_cache.get_buffer(
-            wgpu_context,
+            context,
             bytemuck::cast_slice(&indices[..]),
             wgpu::BufferUsages::INDEX,
         );
 
-        DrawData::Color {
+        Some(DrawData::Color {
             vertex_buffer,
             index_buffer,
             count: indices.len() as u32,
-        }
-    }
-
-    pub(crate) fn render<'a>(
-        &'a self,
-        render_pass: &mut RenderPass<'a>,
-        camera: &'a Camera,
-        vertex_buffer: &'a ReusableBuffer,
-        index_buffer: &'a ReusableBuffer,
-        count: u32,
-    ) {
-        render_pass.set_pipeline(&self.render_pipeline);
-        render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);
-        render_pass.set_vertex_buffer(0, vertex_buffer.buffer.slice(..vertex_buffer.current_size));
-        render_pass.set_index_buffer(
-            index_buffer.buffer.slice(..vertex_buffer.current_size),
-            wgpu::IndexFormat::Uint16,
-        );
-        render_pass.draw_indexed(0..count, 0, 0..1);
+        })
     }
 }

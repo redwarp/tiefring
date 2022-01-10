@@ -1,12 +1,14 @@
-use std::{cell::RefCell, path::Path, rc::Rc};
+use std::{path::Path, rc::Rc};
 
 use cache::{BufferCache, ReusableBuffer};
 use camera::{Camera, CameraSettings};
-use fontdue::layout::{CoordinateSystem, Layout};
+
 use raw_window_handle::HasRawWindowHandle;
-use shape::{ColorRenderer, DrawRectOperation};
-use sprite::{DrawTextureOperation, Sprite, Texture, TextureId, TextureRenderer};
-use text::{DrawTextOperation, Font, FontId, TextContext, TextRenderer};
+use shape::{ColorDataPreper, ColorRenderer, DrawRectOperation};
+use sprite::{
+    DrawTextureOperation, Sprite, Texture, TextureDataPreper, TextureId, TextureRenderer,
+};
+use text::{DrawTextOperation, Font, FontId, TextContext, TextDataPreper, TextRenderer};
 use thiserror::Error;
 use wgpu::{CommandEncoder, RenderPass};
 
@@ -36,6 +38,7 @@ pub struct Canvas {
     text_renderer: TextRenderer,
     draw_data: Vec<DrawData>,
     buffer_cache: BufferCache,
+    draw_data_prepers: DrawDataPrepers,
 }
 
 impl Canvas {
@@ -65,6 +68,7 @@ impl Canvas {
         let text_renderer = TextRenderer::new(&wgpu_context, &text_context, &camera);
         let draw_data = vec![];
         let buffer_cache = BufferCache::new();
+        let draw_data_prepers = DrawDataPrepers::new();
 
         Ok(Canvas {
             wgpu_context,
@@ -77,6 +81,7 @@ impl Canvas {
             text_renderer,
             draw_data,
             buffer_cache,
+            draw_data_prepers,
         })
     }
 
@@ -329,34 +334,19 @@ impl Canvas {
     fn prepare_draw_operations(&mut self) {
         let draw_data = &mut self.draw_data;
         draw_data.clear();
-        for operation_block in &self.graphics.operation_blocks {
-            match operation_block.operation_type {
-                DrawOperationType::Rect => {
-                    draw_data.push(self.color_renderer.prepare_renderering(
-                        &mut self.buffer_cache,
-                        &self.wgpu_context,
-                        &operation_block.draw_rect_operations,
-                    ));
-                }
-                DrawOperationType::Texture(_) => {
-                    draw_data.push(self.texture_renderer.prepare_renderering(
-                        &mut self.buffer_cache,
-                        &self.wgpu_context,
-                        &operation_block.draw_texture_operations,
-                    ));
-                }
-                DrawOperationType::Text(_) => {
-                    if let Some(draw_text) = self.text_renderer.prepare_renderering(
-                        &mut self.buffer_cache,
+
+        draw_data.extend(
+            self.graphics
+                .operation_blocks
+                .drain(..)
+                .filter_map(|operation_block| {
+                    self.draw_data_prepers.prepare(
                         &self.wgpu_context,
                         &self.text_context,
-                        &operation_block.draw_text_operations,
-                    ) {
-                        draw_data.push(draw_text)
-                    }
-                }
-            }
-        }
+                        operation_block,
+                    )
+                }),
+        );
     }
 
     fn handle_draw_operations<'a>(&'a self, render_pass: &mut RenderPass<'a>) {
@@ -428,7 +418,6 @@ pub struct Graphics {
     operation_blocks: Vec<OperationBlock>,
     size: SizeInPx,
     translation: Option<Position>,
-    layout: Rc<RefCell<Layout>>,
 }
 
 struct OperationBlock {
@@ -488,7 +477,6 @@ impl Graphics {
             operation_blocks: Vec::new(),
             size: SizeInPx { width, height },
             translation: None,
-            layout: Rc::new(RefCell::new(Layout::new(CoordinateSystem::PositiveYDown))),
         }
     }
 
@@ -545,14 +533,12 @@ impl Graphics {
         };
         let text: String = text.into();
         let font_for_px = font.get_font_for_px(px);
-        let layout = self.layout.clone();
         self.get_operation_block(DrawOperationType::Text(FontId(font.font.file_hash(), px)))
             .push_draw_text_operation(DrawTextOperation {
                 font_for_px,
                 position,
                 text,
                 color,
-                layout,
             });
     }
 
@@ -838,5 +824,57 @@ impl WgpuContext {
             usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT,
             label: None,
         });
+    }
+}
+
+trait DrawDataPreper<O, C> {
+    fn prepare(
+        &mut self,
+        buffer_cache: &mut BufferCache,
+        context: C,
+        operations: &[O],
+    ) -> Option<DrawData>;
+}
+
+struct DrawDataPrepers {
+    color_data_preper: ColorDataPreper,
+    text_data_preper: TextDataPreper,
+    texture_data_preper: TextureDataPreper,
+    buffer_cache: BufferCache,
+}
+
+impl DrawDataPrepers {
+    fn new() -> Self {
+        Self {
+            color_data_preper: ColorDataPreper::new(),
+            text_data_preper: TextDataPreper::new(),
+            texture_data_preper: TextureDataPreper::new(),
+            buffer_cache: BufferCache::new(),
+        }
+    }
+
+    fn prepare(
+        &mut self,
+        wgpu_context: &WgpuContext,
+        text_context: &TextContext,
+        operation_block: OperationBlock,
+    ) -> Option<DrawData> {
+        match operation_block.operation_type {
+            DrawOperationType::Rect => self.color_data_preper.prepare(
+                &mut self.buffer_cache,
+                wgpu_context,
+                &operation_block.draw_rect_operations,
+            ),
+            DrawOperationType::Texture(_) => self.texture_data_preper.prepare(
+                &mut self.buffer_cache,
+                wgpu_context,
+                &operation_block.draw_texture_operations,
+            ),
+            DrawOperationType::Text(_) => self.text_data_preper.prepare(
+                &mut self.buffer_cache,
+                (wgpu_context, text_context),
+                &operation_block.draw_text_operations,
+            ),
+        }
     }
 }

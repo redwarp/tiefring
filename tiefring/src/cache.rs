@@ -124,3 +124,14 @@ impl ReusableBuffer {
         self.current_size = current_size;
     }
 }
+
+pub trait Resetable {
+    fn reset_with_capacity(&mut self, capacity: usize);
+}
+
+impl<T> Resetable for Vec<T> {
+    fn reset_with_capacity(&mut self, capacity: usize) {
+        unsafe { self.set_len(0) };
+        self.reserve(capacity);
+    }
+}
