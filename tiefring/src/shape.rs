@@ -38,6 +38,7 @@ impl ColorVertex {
 
 pub(crate) struct ColorRenderer {
     render_pipeline: RenderPipeline,
+    vertices: Vec<ColorVertex>,
 }
 
 impl ColorRenderer {
@@ -101,39 +102,49 @@ impl ColorRenderer {
                     multiview: None,
                 });
 
-        Self { render_pipeline }
+        let vertices = Vec::new();
+
+        Self {
+            render_pipeline,
+            vertices,
+        }
     }
 
     pub fn prepare_renderering(
-        &self,
+        &mut self,
         buffer_cache: &mut BufferCache,
         wgpu_context: &WgpuContext,
         draw_rect_operations: &[DrawRectOperation],
     ) -> DrawData {
-        let vertices: Vec<_> = draw_rect_operations
-            .iter()
-            .flat_map(|&DrawRectOperation(rect, color)| {
-                let color: [f32; 4] = color.as_float_array();
-                [
-                    ColorVertex {
-                        position: [rect.left as f32, rect.top as f32],
-                        color,
-                    },
-                    ColorVertex {
-                        position: [rect.left as f32, rect.bottom as f32],
-                        color,
-                    },
-                    ColorVertex {
-                        position: [rect.right as f32, rect.bottom as f32],
-                        color,
-                    },
-                    ColorVertex {
-                        position: [rect.right as f32, rect.top as f32],
-                        color,
-                    },
-                ]
-            })
-            .collect();
+        let vertices = &mut self.vertices;
+        unsafe { vertices.set_len(0) };
+        vertices.reserve(draw_rect_operations.len() * 4);
+
+        vertices.extend(
+            draw_rect_operations
+                .iter()
+                .flat_map(|&DrawRectOperation(rect, color)| {
+                    let color: [f32; 4] = color.as_float_array();
+                    [
+                        ColorVertex {
+                            position: [rect.left as f32, rect.top as f32],
+                            color,
+                        },
+                        ColorVertex {
+                            position: [rect.left as f32, rect.bottom as f32],
+                            color,
+                        },
+                        ColorVertex {
+                            position: [rect.right as f32, rect.bottom as f32],
+                            color,
+                        },
+                        ColorVertex {
+                            position: [rect.right as f32, rect.top as f32],
+                            color,
+                        },
+                    ]
+                }),
+        );
 
         let indices: Vec<u16> = (0..draw_rect_operations.len())
             .flat_map(|index| {

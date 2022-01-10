@@ -284,6 +284,7 @@ pub(crate) struct TextureRenderer {
     render_pipeline: RenderPipeline,
     pub(crate) sampler: Sampler,
     pub(crate) texture_bind_group_layout: BindGroupLayout,
+    vertices: Vec<TextureVertex>,
 }
 
 impl TextureRenderer {
@@ -385,10 +386,13 @@ impl TextureRenderer {
             ..Default::default()
         });
 
+        let vertices = Vec::new();
+
         TextureRenderer {
             render_pipeline,
             sampler,
             texture_bind_group_layout,
+            vertices,
         }
     }
 
@@ -413,7 +417,7 @@ impl TextureRenderer {
     }
 
     pub fn prepare_renderering(
-        &self,
+        &mut self,
         buffer_cache: &mut BufferCache,
         wgpu_context: &WgpuContext,
         draw_texture_operations: &[DrawTextureOperation],
@@ -424,29 +428,28 @@ impl TextureRenderer {
             .texture
             .clone();
 
-        let vertices: Vec<_> = draw_texture_operations
-            .iter()
-            .flat_map(|operation| {
-                [
-                    TextureVertex {
-                        position: [operation.destination.left, operation.destination.top],
-                        tex_coords: [operation.tex_coords.left, operation.tex_coords.top],
-                    },
-                    TextureVertex {
-                        position: [operation.destination.left, operation.destination.bottom],
-                        tex_coords: [operation.tex_coords.left, operation.tex_coords.bottom],
-                    },
-                    TextureVertex {
-                        position: [operation.destination.right, operation.destination.bottom],
-                        tex_coords: [operation.tex_coords.right, operation.tex_coords.bottom],
-                    },
-                    TextureVertex {
-                        position: [operation.destination.right, operation.destination.top],
-                        tex_coords: [operation.tex_coords.right, operation.tex_coords.top],
-                    },
-                ]
-            })
-            .collect();
+        let vertices = &mut self.vertices;
+        unsafe { vertices.set_len(0) };
+        vertices.extend(draw_texture_operations.iter().flat_map(|operation| {
+            [
+                TextureVertex {
+                    position: [operation.destination.left, operation.destination.top],
+                    tex_coords: [operation.tex_coords.left, operation.tex_coords.top],
+                },
+                TextureVertex {
+                    position: [operation.destination.left, operation.destination.bottom],
+                    tex_coords: [operation.tex_coords.left, operation.tex_coords.bottom],
+                },
+                TextureVertex {
+                    position: [operation.destination.right, operation.destination.bottom],
+                    tex_coords: [operation.tex_coords.right, operation.tex_coords.bottom],
+                },
+                TextureVertex {
+                    position: [operation.destination.right, operation.destination.top],
+                    tex_coords: [operation.tex_coords.right, operation.tex_coords.top],
+                },
+            ]
+        }));
 
         let indices: Vec<u16> = (0..draw_texture_operations.len())
             .flat_map(|index| {

@@ -340,6 +340,7 @@ impl TextVertex {
 
 pub(crate) struct TextRenderer {
     render_pipeline: RenderPipeline,
+    vertices: Vec<TextVertex>,
 }
 
 impl TextRenderer {
@@ -402,11 +403,16 @@ impl TextRenderer {
                     multiview: None,
                 });
 
-        TextRenderer { render_pipeline }
+        let vertices = Vec::new();
+
+        TextRenderer {
+            render_pipeline,
+            vertices,
+        }
     }
 
     pub fn prepare_renderering(
-        &self,
+        &mut self,
         buffer_cache: &mut BufferCache,
         wgpu_context: &WgpuContext,
         text_context: &TextContext,
@@ -421,7 +427,9 @@ impl TextRenderer {
             return None;
         }
 
-        let mut vertices: Vec<TextVertex> = Vec::with_capacity(char_count * 4);
+        let vertices = &mut self.vertices;
+        unsafe { vertices.set_len(0) }
+        vertices.reserve(char_count * 4);
 
         let texture = draw_text_operations
             .first()
