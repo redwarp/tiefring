@@ -182,7 +182,20 @@ impl Renderer {
                                     self.sprites.tiles.sprite_with_index(*tile_index),
                                     rect,
                                 );
+                            }
+                        }
+                    }
 
+                    // Separate drawing the fog of war overlay from sprites, to reduce draw calls.
+                    for j in y_range.clone() {
+                        for i in x_range.clone() {
+                            if map.is_revealed(i as i32, j as i32) {
+                                let rect = Rect::from_xywh(
+                                    i as f32 * TILE_SIZE,
+                                    j as f32 * TILE_SIZE,
+                                    TILE_SIZE,
+                                    TILE_SIZE,
+                                );
                                 if !map.is_visible(i as i32, j as i32) {
                                     graphics.draw_rect(rect, Color::rgba(0.0, 0.0, 0.05, 0.8));
                                 }

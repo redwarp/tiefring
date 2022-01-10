@@ -1,6 +1,10 @@
-use wgpu::{util::DeviceExt, Buffer, RenderPass, RenderPipeline};
+use wgpu::{RenderPass, RenderPipeline};
 
-use crate::{camera::Camera, Color, DrawData, Rect, WgpuContext};
+use crate::{
+    cache::{BufferCache, ReusableBuffer},
+    camera::Camera,
+    Color, DrawData, Rect, WgpuContext,
+};
 
 pub(crate) struct DrawRectOperation(pub Rect, pub Color);
 
@@ -102,6 +106,7 @@ impl ColorRenderer {
 
     pub fn prepare_renderering(
         &self,
+        buffer_cache: &mut BufferCache,
         wgpu_context: &WgpuContext,
         draw_rect_operations: &[DrawRectOperation],
     ) -> DrawData {
@@ -137,22 +142,17 @@ impl ColorRenderer {
             })
             .collect();
 
-        let vertex_buffer =
-            wgpu_context
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Vertex Buffer"),
-                    contents: bytemuck::cast_slice(&vertices[..]),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
-        let index_buffer =
-            wgpu_context
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Index Buffer"),
-                    contents: bytemuck::cast_slice(&indices[..]),
-                    usage: wgpu::BufferUsages::INDEX,
-                });
+        let vertex_buffer = buffer_cache.get_buffer(
+            wgpu_context,
+            bytemuck::cast_slice(&vertices[..]),
+            wgpu::BufferUsages::VERTEX,
+        );
+
+        let index_buffer = buffer_cache.get_buffer(
+            wgpu_context,
+            bytemuck::cast_slice(&indices[..]),
+            wgpu::BufferUsages::INDEX,
+        );
 
         DrawData::Color {
             vertex_buffer,
@@ -165,14 +165,17 @@ impl ColorRenderer {
         &'a self,
         render_pass: &mut RenderPass<'a>,
         camera: &'a Camera,
-        vertex_buffer: &'a Buffer,
-        index_buffer: &'a Buffer,
+        vertex_buffer: &'a ReusableBuffer,
+        index_buffer: &'a ReusableBuffer,
         count: u32,
     ) {
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);
-        render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-        render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        render_pass.set_vertex_buffer(0, vertex_buffer.buffer.slice(..vertex_buffer.current_size));
+        render_pass.set_index_buffer(
+            index_buffer.buffer.slice(..vertex_buffer.current_size),
+            wgpu::IndexFormat::Uint16,
+        );
         render_pass.draw_indexed(0..count, 0, 0..1);
     }
 }

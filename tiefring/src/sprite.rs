@@ -1,11 +1,12 @@
 use std::{path::Path, rc::Rc, sync::atomic::AtomicUsize};
 
-use wgpu::{
-    util::DeviceExt, BindGroup, BindGroupLayout, Buffer, RenderPass, RenderPipeline, Sampler,
-    SamplerBindingType,
-};
+use wgpu::{BindGroup, BindGroupLayout, RenderPass, RenderPipeline, Sampler, SamplerBindingType};
 
-use crate::{camera::Camera, Canvas, DrawData, Rect, SizeInPx, WgpuContext};
+use crate::{
+    cache::{BufferCache, ReusableBuffer},
+    camera::Camera,
+    Canvas, DrawData, Rect, SizeInPx, WgpuContext,
+};
 
 pub(crate) struct DrawTextureOperation {
     pub tex_coords: Rect,
@@ -395,21 +396,25 @@ impl TextureRenderer {
         &'a self,
         render_pass: &mut RenderPass<'a>,
         camera: &'a Camera,
-        vertex_buffer: &'a Buffer,
-        index_buffer: &'a Buffer,
+        vertex_buffer: &'a ReusableBuffer,
+        index_buffer: &'a ReusableBuffer,
         count: u32,
         texture: &'a Texture,
     ) {
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);
         render_pass.set_bind_group(1, &texture.texture_bind_group, &[]);
-        render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-        render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        render_pass.set_vertex_buffer(0, vertex_buffer.buffer.slice(..vertex_buffer.current_size));
+        render_pass.set_index_buffer(
+            index_buffer.buffer.slice(..index_buffer.current_size),
+            wgpu::IndexFormat::Uint16,
+        );
         render_pass.draw_indexed(0..count, 0, 0..1);
     }
 
     pub fn prepare_renderering(
         &self,
+        buffer_cache: &mut BufferCache,
         wgpu_context: &WgpuContext,
         draw_texture_operations: &[DrawTextureOperation],
     ) -> DrawData {
@@ -450,22 +455,17 @@ impl TextureRenderer {
             })
             .collect();
 
-        let vertex_buffer =
-            wgpu_context
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Vertex Buffer"),
-                    contents: bytemuck::cast_slice(&vertices[..]),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
-        let index_buffer =
-            wgpu_context
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Index Buffer"),
-                    contents: bytemuck::cast_slice(&indices[..]),
-                    usage: wgpu::BufferUsages::INDEX,
-                });
+        let vertex_buffer = buffer_cache.get_buffer(
+            wgpu_context,
+            bytemuck::cast_slice(&vertices[..]),
+            wgpu::BufferUsages::VERTEX,
+        );
+
+        let index_buffer = buffer_cache.get_buffer(
+            wgpu_context,
+            bytemuck::cast_slice(&indices[..]),
+            wgpu::BufferUsages::INDEX,
+        );
 
         let count = indices.len() as u32;
         DrawData::Texture {

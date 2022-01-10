@@ -1,5 +1,6 @@
 use std::{cell::RefCell, path::Path, rc::Rc};
 
+use cache::{BufferCache, ReusableBuffer};
 use camera::{Camera, CameraSettings};
 use fontdue::layout::{CoordinateSystem, Layout};
 use raw_window_handle::HasRawWindowHandle;
@@ -7,8 +8,9 @@ use shape::{ColorRenderer, DrawRectOperation};
 use sprite::{DrawTextureOperation, Sprite, Texture, TextureId, TextureRenderer};
 use text::{DrawTextOperation, Font, FontId, TextContext, TextRenderer};
 use thiserror::Error;
-use wgpu::{Buffer, CommandEncoder, RenderPass};
+use wgpu::{CommandEncoder, RenderPass};
 
+mod cache;
 mod camera;
 mod shape;
 pub mod sprite;
@@ -33,6 +35,7 @@ pub struct Canvas {
     text_context: TextContext,
     text_renderer: TextRenderer,
     draw_data: Vec<DrawData>,
+    buffer_cache: BufferCache,
 }
 
 impl Canvas {
@@ -61,6 +64,7 @@ impl Canvas {
         let text_context = TextContext::new(&wgpu_context);
         let text_renderer = TextRenderer::new(&wgpu_context, &text_context, &camera);
         let draw_data = vec![];
+        let buffer_cache = BufferCache::new();
 
         Ok(Canvas {
             wgpu_context,
@@ -72,6 +76,7 @@ impl Canvas {
             text_context,
             text_renderer,
             draw_data,
+            buffer_cache,
         })
     }
 
@@ -79,6 +84,7 @@ impl Canvas {
     where
         F: FnOnce(&mut Graphics),
     {
+        self.recycle();
         self.graphics.reset();
         let mut encoder: CommandEncoder =
             self.wgpu_context
@@ -116,9 +122,8 @@ impl Canvas {
                 depth_stencil_attachment: None,
             });
 
-            // self.handle_draw_operations(&mut render_pass);
             self.prepare_draw_operations();
-            self.handle_draw_operations(&mut render_pass)
+            self.handle_draw_operations(&mut render_pass);
         }
 
         encoder.copy_texture_to_texture(
@@ -143,6 +148,8 @@ impl Canvas {
 
         self.wgpu_context.queue.submit(Some(encoder.finish()));
         surface_texture.present();
+
+        self.buffer_cache.clear();
 
         Ok(())
     }
@@ -288,6 +295,37 @@ impl Canvas {
         Ok(())
     }
 
+    fn recycle(&mut self) {
+        for draw_data in self.draw_data.drain(..) {
+            match draw_data {
+                DrawData::Color {
+                    vertex_buffer,
+                    index_buffer,
+                    ..
+                } => {
+                    self.buffer_cache.release_buffer(vertex_buffer);
+                    self.buffer_cache.release_buffer(index_buffer);
+                }
+                DrawData::Texture {
+                    vertex_buffer,
+                    index_buffer,
+                    ..
+                } => {
+                    self.buffer_cache.release_buffer(vertex_buffer);
+                    self.buffer_cache.release_buffer(index_buffer);
+                }
+                DrawData::Text {
+                    vertex_buffer,
+                    index_buffer,
+                    ..
+                } => {
+                    self.buffer_cache.release_buffer(vertex_buffer);
+                    self.buffer_cache.release_buffer(index_buffer);
+                }
+            }
+        }
+    }
+
     fn prepare_draw_operations(&mut self) {
         let draw_data = &mut self.draw_data;
         draw_data.clear();
@@ -295,18 +333,21 @@ impl Canvas {
             match operation_block.operation_type {
                 DrawOperationType::Rect => {
                     draw_data.push(self.color_renderer.prepare_renderering(
+                        &mut self.buffer_cache,
                         &self.wgpu_context,
                         &operation_block.draw_rect_operations,
                     ));
                 }
                 DrawOperationType::Texture(_) => {
                     draw_data.push(self.texture_renderer.prepare_renderering(
+                        &mut self.buffer_cache,
                         &self.wgpu_context,
                         &operation_block.draw_texture_operations,
                     ));
                 }
                 DrawOperationType::Text(_) => {
                     if let Some(draw_text) = self.text_renderer.prepare_renderering(
+                        &mut self.buffer_cache,
                         &self.wgpu_context,
                         &self.text_context,
                         &operation_block.draw_text_operations,
@@ -422,19 +463,19 @@ impl OperationBlock {
 
 enum DrawData {
     Color {
-        vertex_buffer: Buffer,
-        index_buffer: Buffer,
+        vertex_buffer: ReusableBuffer,
+        index_buffer: ReusableBuffer,
         count: u32,
     },
     Texture {
-        vertex_buffer: Buffer,
-        index_buffer: Buffer,
+        vertex_buffer: ReusableBuffer,
+        index_buffer: ReusableBuffer,
         count: u32,
         texture: Rc<Texture>,
     },
     Text {
-        vertex_buffer: Buffer,
-        index_buffer: Buffer,
+        vertex_buffer: ReusableBuffer,
+        index_buffer: ReusableBuffer,
         count: u32,
         texture: Rc<Texture>,
     },
@@ -707,10 +748,10 @@ impl Color {
 }
 
 #[derive(Debug)]
-struct WgpuContext {
+pub(crate) struct WgpuContext {
     surface: wgpu::Surface,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     size: SizeInPx,
     buffer_texture: wgpu::Texture,
