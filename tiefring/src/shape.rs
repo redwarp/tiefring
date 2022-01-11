@@ -107,13 +107,11 @@ impl ColorRenderer {
     pub(crate) fn render<'a>(
         &'a self,
         render_pass: &mut RenderPass<'a>,
-        camera: &'a Camera,
         vertex_buffer: &'a ReusableBuffer,
         index_buffer: &'a ReusableBuffer,
         count: u32,
     ) {
         render_pass.set_pipeline(&self.render_pipeline);
-        render_pass.set_bind_group(0, &camera.camera_bind_group, &[]);
         render_pass.set_vertex_buffer(0, vertex_buffer.buffer.slice(..vertex_buffer.current_size));
         render_pass.set_index_buffer(
             index_buffer.buffer.slice(..vertex_buffer.current_size),

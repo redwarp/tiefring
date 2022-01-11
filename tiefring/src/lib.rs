@@ -89,8 +89,6 @@ impl Canvas {
     where
         F: FnOnce(&mut Graphics),
     {
-        self.recycle();
-        self.graphics.reset();
         let mut encoder: CommandEncoder =
             self.wgpu_context
                 .device
@@ -127,9 +125,11 @@ impl Canvas {
                 depth_stencil_attachment: None,
             });
 
-            self.prepare_draw_operations();
-            self.handle_draw_operations(&mut render_pass);
+            self.prepare_draw_calls();
+            self.render_draw_calls(&mut render_pass);
         }
+
+        self.cleanup_draw_calls();
 
         encoder.copy_texture_to_texture(
             wgpu::ImageCopyTexture {
@@ -154,13 +154,10 @@ impl Canvas {
         self.wgpu_context.queue.submit(Some(encoder.finish()));
         surface_texture.present();
 
-        self.buffer_cache.clear();
-
         Ok(())
     }
 
     pub fn redraw_last(&mut self) -> Result<(), Error> {
-        self.graphics.reset();
         let mut encoder: CommandEncoder =
             self.wgpu_context
                 .device
@@ -300,7 +297,7 @@ impl Canvas {
         Ok(())
     }
 
-    fn recycle(&mut self) {
+    fn cleanup_draw_calls(&mut self) {
         for draw_data in self.draw_data.drain(..) {
             match draw_data {
                 DrawData::Color {
@@ -329,9 +326,11 @@ impl Canvas {
                 }
             }
         }
+
+        self.graphics.reset();
     }
 
-    fn prepare_draw_operations(&mut self) {
+    fn prepare_draw_calls(&mut self) {
         let draw_data = &mut self.draw_data;
         draw_data.clear();
 
@@ -347,22 +346,23 @@ impl Canvas {
                     )
                 }),
         );
+
+        // Remove buffers that were not reused.
+        self.buffer_cache.clear();
     }
 
-    fn handle_draw_operations<'a>(&'a self, render_pass: &mut RenderPass<'a>) {
+    fn render_draw_calls<'a>(&'a self, render_pass: &mut RenderPass<'a>) {
+        render_pass.set_bind_group(0, &self.camera.camera_bind_group, &[]);
+
         for draw_data in &self.draw_data {
             match draw_data {
                 DrawData::Color {
                     vertex_buffer,
                     index_buffer,
                     count,
-                } => self.color_renderer.render(
-                    render_pass,
-                    &self.camera,
-                    vertex_buffer,
-                    index_buffer,
-                    *count,
-                ),
+                } => self
+                    .color_renderer
+                    .render(render_pass, vertex_buffer, index_buffer, *count),
                 DrawData::Texture {
                     vertex_buffer,
                     index_buffer,
@@ -370,7 +370,6 @@ impl Canvas {
                     texture,
                 } => self.texture_renderer.render(
                     render_pass,
-                    &self.camera,
                     vertex_buffer,
                     index_buffer,
                     *count,
@@ -383,7 +382,6 @@ impl Canvas {
                     texture,
                 } => self.text_renderer.render(
                     render_pass,
-                    &self.camera,
                     vertex_buffer,
                     index_buffer,
                     *count,
