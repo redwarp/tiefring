@@ -6,7 +6,7 @@ use camera::{Camera, CameraSettings};
 use glam::{Mat4, Vec3};
 use raw_window_handle::HasRawWindowHandle;
 use renderer::{ColorMatrix, RenderOperation, RenderPreper, Renderer};
-use sprite::{Sprite, Texture, TextureContext, TextureId};
+use sprite::{Sprite, Texture, TextureContext};
 use text::{Font, TextDataPreper};
 use thiserror::Error;
 use wgpu::{CommandEncoder, RenderPass};
@@ -313,11 +313,7 @@ impl Canvas {
 
     fn cleanup_draw_calls(&mut self) {
         for draw_data in self.draw_data.drain(..) {
-            match draw_data {
-                DrawData::Render {
-                    instance_buffer, ..
-                } => self.buffer_cache.release_buffer(instance_buffer),
-            }
+            self.buffer_cache.release_buffer(draw_data.instance_buffer);
         }
 
         self.graphics.reset();
@@ -331,7 +327,7 @@ impl Canvas {
             self.graphics
                 .operation_blocks
                 .drain(..)
-                .filter_map(|operation_block| {
+                .map(|operation_block| {
                     self.draw_data_prepers
                         .prepare(&self.wgpu_context.borrow(), operation_block)
                 }),
@@ -344,16 +340,14 @@ impl Canvas {
     fn render_draw_calls<'a>(&'a self, render_pass: &mut RenderPass<'a>) {
         render_pass.set_bind_group(0, &self.camera.camera_bind_group, &[]);
 
-        for draw_data in &self.draw_data {
-            match draw_data {
-                DrawData::Render {
-                    instance_buffer,
-                    count,
-                    texture,
-                } => self
-                    .renderer
-                    .render(render_pass, instance_buffer, *count, texture),
-            }
+        for DrawData {
+            instance_buffer,
+            count,
+            texture,
+        } in &self.draw_data
+        {
+            self.renderer
+                .render(render_pass, instance_buffer, *count, texture);
         }
     }
 }
@@ -389,7 +383,6 @@ pub struct Graphics {
 }
 
 struct OperationBlock {
-    operation_type: DrawOperationType,
     render_operations: Vec<RenderOperation>,
     texture: Rc<Texture>,
 }
@@ -397,9 +390,8 @@ struct OperationBlock {
 impl OperationBlock {
     fn with_texture(texture: Rc<Texture>) -> Self {
         OperationBlock {
-            operation_type: DrawOperationType::ExpRect(texture.id),
             render_operations: vec![],
-            texture: texture,
+            texture,
         }
     }
 
@@ -408,12 +400,10 @@ impl OperationBlock {
     }
 }
 
-enum DrawData {
-    Render {
-        instance_buffer: ReusableBuffer,
-        count: u32,
-        texture: Rc<Texture>,
-    },
+struct DrawData {
+    instance_buffer: ReusableBuffer,
+    count: u32,
+    texture: Rc<Texture>,
 }
 
 impl Graphics {
@@ -531,8 +521,7 @@ impl Graphics {
     }
 
     fn get_operation_block(&mut self, texture: &Rc<Texture>) -> &mut OperationBlock {
-        let current_operation = DrawOperationType::ExpRect(texture.id);
-        let need_new = !matches!(&self.current_operation_block, Some(operation_block) if operation_block.operation_type == current_operation);
+        let need_new = !matches!(&self.current_operation_block, Some(operation_block) if operation_block.texture.id == texture.id);
         if need_new {
             if let Some(operation_block) = self.current_operation_block.take() {
                 self.operation_blocks.push(operation_block);
@@ -543,11 +532,6 @@ impl Graphics {
 
         self.current_operation_block.as_mut().unwrap()
     }
-}
-
-#[derive(PartialEq, Debug)]
-enum DrawOperationType {
-    ExpRect(TextureId),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -813,11 +797,7 @@ impl DrawDataPrepers {
         }
     }
 
-    fn prepare(
-        &mut self,
-        wgpu_context: &WgpuContext,
-        operation_block: OperationBlock,
-    ) -> Option<DrawData> {
+    fn prepare(&mut self, wgpu_context: &WgpuContext, operation_block: OperationBlock) -> DrawData {
         self.render_preper.prepare(
             &mut self.buffer_cache,
             wgpu_context,

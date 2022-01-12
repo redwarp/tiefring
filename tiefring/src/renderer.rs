@@ -305,7 +305,7 @@ impl RenderPreper {
         context: &WgpuContext,
         texture: Rc<Texture>,
         operations: &[RenderOperation],
-    ) -> Option<crate::DrawData> {
+    ) -> DrawData {
         let count = operations.len();
         self.instances.reset_with_capacity(count);
         self.instances.extend(operations.iter().map(|operation| {
@@ -317,15 +317,15 @@ impl RenderPreper {
         }));
 
         let instance_buffer = buffer_cache.get_buffer(
-            &context,
+            context,
             bytemuck::cast_slice(&self.instances[..]),
             BufferUsages::VERTEX,
         );
 
-        Some(DrawData::Render {
+        DrawData {
             instance_buffer,
             count: count as u32,
             texture,
-        })
+        }
     }
 }

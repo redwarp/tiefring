@@ -297,17 +297,13 @@ impl TextDataPreper {
                 let position =
                     Rect::from_xywh(glyph.x, glyph.y, glyph.width as f32, glyph.height as f32);
 
-                if let Some(character) =
-                    font_for_px.get_or_create_character(glyph.parent, wgpu_context, texture_context)
-                {
-                    Some(RenderOperation {
+                font_for_px
+                    .get_or_create_character(glyph.parent, wgpu_context, texture_context)
+                    .map(|character| RenderOperation {
                         tex_coords: character.tex_coords,
                         position: position.into(),
                         color_matrix,
                     })
-                } else {
-                    None
-                }
             })
             .collect();
 
