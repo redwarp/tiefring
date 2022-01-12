@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, mem::size_of};
 
-use wgpu::{util::DeviceExt, Buffer, BufferUsages, Device, Queue};
+use wgpu::{util::DeviceExt, Buffer, BufferSlice, BufferUsages, Device, Queue};
 
 use crate::WgpuContext;
 
@@ -117,7 +117,11 @@ impl ReusableBuffer {
         }
     }
 
-    fn update(&mut self, queue: &Queue, content: &[u8]) {
+    pub fn slice(&self) -> BufferSlice {
+        self.buffer.slice(..self.current_size)
+    }
+
+    pub fn update(&mut self, queue: &Queue, content: &[u8]) {
         let current_size = (size_of::<u8>() * content.len()) as u64;
         queue.write_buffer(&self.buffer, 0, content);
 

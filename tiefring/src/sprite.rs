@@ -22,13 +22,14 @@ pub struct Sprite {
 }
 
 impl Sprite {
-    pub fn load_data<S>(canvas: &mut Canvas, rgba: &[u8], dimensions: S) -> Self
+    pub fn load_data<S>(canvas: &Canvas, rgba: &[u8], dimensions: S) -> Self
     where
         S: Into<SizeInPx> + Copy,
     {
         let texture = Rc::new(Texture::new(
             &canvas.wgpu_context,
-            &canvas.texture_renderer,
+            &canvas.texture_renderer.texture_bind_group_layout,
+            &canvas.texture_renderer.sampler,
             rgba,
             dimensions.into(),
         ));
@@ -46,7 +47,7 @@ impl Sprite {
         }
     }
 
-    pub fn load_image<P: AsRef<Path>>(canvas: &mut Canvas, path: P) -> Option<Self> {
+    pub fn load_image<P: AsRef<Path>>(canvas: &Canvas, path: P) -> Option<Self> {
         let image = image::open(path).ok()?;
 
         let rgba = image.to_rgba8();
@@ -77,7 +78,8 @@ impl TileSet {
     {
         let texture = Rc::new(Texture::new(
             &canvas.wgpu_context,
-            &canvas.texture_renderer,
+            &canvas.texture_renderer.texture_bind_group_layout,
+            &canvas.texture_renderer.sampler,
             rgba,
             dimensions.into(),
         ));
@@ -180,9 +182,10 @@ pub(crate) struct Texture {
 pub(crate) static TEXTURE_INDEX: AtomicUsize = AtomicUsize::new(0);
 
 impl Texture {
-    fn new(
+    pub fn new(
         wgpu_context: &WgpuContext,
-        texture_renderer: &TextureRenderer,
+        texture_bind_group_layout: &BindGroupLayout,
+        sampler: &Sampler,
         rgba: &[u8],
         dimensions: SizeInPx,
     ) -> Self {
@@ -229,7 +232,7 @@ impl Texture {
             wgpu_context
                 .device
                 .create_bind_group(&wgpu::BindGroupDescriptor {
-                    layout: &texture_renderer.texture_bind_group_layout,
+                    layout: texture_bind_group_layout,
                     entries: &[
                         wgpu::BindGroupEntry {
                             binding: 0,
@@ -237,7 +240,7 @@ impl Texture {
                         },
                         wgpu::BindGroupEntry {
                             binding: 1,
-                            resource: wgpu::BindingResource::Sampler(&texture_renderer.sampler),
+                            resource: wgpu::BindingResource::Sampler(sampler),
                         },
                     ],
                     label: Some("diffuse_bind_group"),

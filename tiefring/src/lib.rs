@@ -3,7 +3,9 @@ use std::{path::Path, rc::Rc};
 use cache::{BufferCache, ReusableBuffer};
 use camera::{Camera, CameraSettings};
 
+use glam::{Mat4, Vec3};
 use raw_window_handle::HasRawWindowHandle;
+use renderer::{ColorMatrix, RenderOperation, RenderPreper, Renderer};
 use shape::{ColorDataPreper, ColorRenderer, DrawRectOperation};
 use sprite::{
     DrawTextureOperation, Sprite, Texture, TextureDataPreper, TextureId, TextureRenderer,
@@ -14,6 +16,7 @@ use wgpu::{CommandEncoder, RenderPass};
 
 mod cache;
 mod camera;
+mod renderer;
 mod shape;
 pub mod sprite;
 pub mod text;
@@ -36,6 +39,7 @@ pub struct Canvas {
     pub(crate) canvas_settings: CanvasSettings,
     text_context: TextContext,
     text_renderer: TextRenderer,
+    renderer: Renderer,
     draw_data: Vec<DrawData>,
     buffer_cache: BufferCache,
     draw_data_prepers: DrawDataPrepers,
@@ -66,9 +70,19 @@ impl Canvas {
         let texture_renderer = TextureRenderer::new(&wgpu_context, &camera);
         let text_context = TextContext::new(&wgpu_context);
         let text_renderer = TextRenderer::new(&wgpu_context, &text_context, &camera);
+        let renderer = Renderer::new(&wgpu_context, &camera);
         let draw_data = vec![];
         let buffer_cache = BufferCache::new();
-        let draw_data_prepers = DrawDataPrepers::new();
+
+        let white_texture = Texture::new(
+            &wgpu_context,
+            &texture_renderer.texture_bind_group_layout,
+            &texture_renderer.sampler,
+            &[255, 255, 255, 255],
+            SizeInPx::new(1, 1),
+        );
+
+        let draw_data_prepers = DrawDataPrepers::new(Rc::new(white_texture));
 
         Ok(Canvas {
             wgpu_context,
@@ -79,6 +93,7 @@ impl Canvas {
             canvas_settings,
             text_context,
             text_renderer,
+            renderer,
             draw_data,
             buffer_cache,
             draw_data_prepers,
@@ -324,6 +339,9 @@ impl Canvas {
                     self.buffer_cache.release_buffer(vertex_buffer);
                     self.buffer_cache.release_buffer(index_buffer);
                 }
+                DrawData::Render {
+                    instance_buffer, ..
+                } => self.buffer_cache.release_buffer(instance_buffer),
             }
         }
 
@@ -387,6 +405,13 @@ impl Canvas {
                     *count,
                     texture,
                 ),
+                DrawData::Render {
+                    instance_buffer,
+                    count,
+                    texture,
+                } => self
+                    .renderer
+                    .render(render_pass, instance_buffer, *count, texture),
             }
         }
     }
@@ -423,6 +448,7 @@ struct OperationBlock {
     draw_rect_operations: Vec<DrawRectOperation>,
     draw_texture_operations: Vec<DrawTextureOperation>,
     draw_text_operations: Vec<DrawTextOperation>,
+    render_operations: Vec<RenderOperation>,
 }
 
 impl OperationBlock {
@@ -432,6 +458,7 @@ impl OperationBlock {
             draw_rect_operations: vec![],
             draw_texture_operations: vec![],
             draw_text_operations: vec![],
+            render_operations: vec![],
         }
     }
 
@@ -445,6 +472,10 @@ impl OperationBlock {
 
     fn push_draw_texture_operation(&mut self, draw_texture_operation: DrawTextureOperation) {
         self.draw_texture_operations.push(draw_texture_operation);
+    }
+
+    fn push_render_operation(&mut self, render_operation: RenderOperation) {
+        self.render_operations.push(render_operation);
     }
 }
 
@@ -466,6 +497,11 @@ enum DrawData {
         count: u32,
         texture: Rc<Texture>,
     },
+    Render {
+        instance_buffer: ReusableBuffer,
+        count: u32,
+        texture: Rc<Texture>,
+    },
 }
 
 impl Graphics {
@@ -479,13 +515,34 @@ impl Graphics {
     }
 
     pub fn draw_rect<R: Into<Rect>>(&mut self, rect: R, color: Color) {
-        let destination = if let Some(translation) = self.translation {
+        self.draw_rect_2(rect, color);
+        // let destination = if let Some(translation) = self.translation {
+        //     rect.into().translated(translation.x, translation.y)
+        // } else {
+        //     rect.into()
+        // };
+        // self.get_operation_block(DrawOperationType::Rect)
+        //     .push_draw_rect_operation(DrawRectOperation(destination, color));
+    }
+
+    pub fn draw_rect_2<R: Into<Rect>>(&mut self, rect: R, color: Color) {
+        let tex_coords = Rect::new(0.0, 0.0, 1.0, 1.0);
+
+        let rect: Rect = if let Some(translation) = self.translation {
             rect.into().translated(translation.x, translation.y)
         } else {
             rect.into()
         };
-        self.get_operation_block(DrawOperationType::Rect)
-            .push_draw_rect_operation(DrawRectOperation(destination, color));
+        let position = Mat4::from_translation(Vec3::new(rect.left, rect.top, 1.0))
+            * Mat4::from_scale(Vec3::new(rect.width(), rect.height(), 1.0));
+        let color_matrix = ColorMatrix::from_color(color);
+        let operation = RenderOperation {
+            position,
+            color_matrix,
+            tex_coords,
+        };
+        self.get_operation_block(DrawOperationType::ExpRect)
+            .push_render_operation(operation);
     }
 
     pub fn draw_sprite(&mut self, sprite: &Sprite, position: Position) {
@@ -578,6 +635,7 @@ enum DrawOperationType {
     Rect,
     Texture(TextureId),
     Text(FontId),
+    ExpRect,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -838,16 +896,20 @@ struct DrawDataPrepers {
     color_data_preper: ColorDataPreper,
     text_data_preper: TextDataPreper,
     texture_data_preper: TextureDataPreper,
+    render_preper: RenderPreper,
     buffer_cache: BufferCache,
+    texture: Rc<Texture>,
 }
 
 impl DrawDataPrepers {
-    fn new() -> Self {
+    fn new(texture: Rc<Texture>) -> Self {
         Self {
             color_data_preper: ColorDataPreper::new(),
             text_data_preper: TextDataPreper::new(),
             texture_data_preper: TextureDataPreper::new(),
+            render_preper: RenderPreper::new(),
             buffer_cache: BufferCache::new(),
+            texture,
         }
     }
 
@@ -872,6 +934,12 @@ impl DrawDataPrepers {
                 &mut self.buffer_cache,
                 (wgpu_context, text_context),
                 &operation_block.draw_text_operations,
+            ),
+            DrawOperationType::ExpRect => self.render_preper.prepare(
+                &mut self.buffer_cache,
+                wgpu_context,
+                self.texture.clone(),
+                &operation_block.render_operations,
             ),
         }
     }
