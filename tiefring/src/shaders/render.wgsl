@@ -19,12 +19,14 @@ struct InstanceInput {
     [[location(7)]] color_matrix_1: vec4<f32>;
     [[location(8)]] color_matrix_2: vec4<f32>;
     [[location(9)]] color_matrix_3: vec4<f32>;
+    [[location(10)]] color_adjust: vec4<f32>;
 };
 
 struct VertexOutput {
     [[builtin(position)]] clip_position: vec4<f32>;
     [[location(0)]] tex_coords: vec2<f32>;
-    [[location(1)]] color_matrix: mat4x4<f32>;
+    [[location(1)]] color_matrix: mat4x4<f32>; // A mat4 takes 4 locations.
+    [[location(5)]] color_adjust: vec4<f32>;
 };
 
 [[stage(vertex)]]
@@ -53,6 +55,7 @@ fn vs_main(
     ));
     
     out.color_matrix = color_matrix;
+    out.color_adjust = instance.color_adjust;
     return out;
 }
 
@@ -64,5 +67,5 @@ var s_diffuse: sampler;
 
 [[stage(fragment)]]
 fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
-    return in.color_matrix * textureSample(t_diffuse, s_diffuse, in.tex_coords);
+    return in.color_matrix * textureSample(t_diffuse, s_diffuse, in.tex_coords) + in.color_adjust;
 }

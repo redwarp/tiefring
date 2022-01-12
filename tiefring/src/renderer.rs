@@ -3,14 +3,13 @@ use std::rc::Rc;
 use glam::Mat4;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
-    BindGroupLayout, Buffer, BufferUsages, RenderPass, RenderPipeline, Sampler, SamplerBindingType,
-    VertexBufferLayout,
+    Buffer, BufferUsages, RenderPass, RenderPipeline, VertexBufferLayout,
 };
 
 use crate::{
     cache::{Resetable, ReusableBuffer},
     camera::Camera,
-    sprite::Texture,
+    sprite::{Texture, TextureContext},
     Color, DrawData, Rect, RenderPosition, WgpuContext,
 };
 
@@ -39,6 +38,7 @@ impl Vertex {
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub(crate) struct ColorMatrix {
     matrix: [[f32; 4]; 4],
+    adjust: [f32; 4],
 }
 
 impl ColorMatrix {
@@ -49,8 +49,20 @@ impl ColorMatrix {
             [0.0, 0.0, color.b, 0.0],
             [0.0, 0.0, 0.0, color.a],
         ];
+        let adjust = [0.0, 0.0, 0.0, 0.0];
 
-        Self { matrix }
+        Self { matrix, adjust }
+    }
+
+    pub fn for_text(color: Color) -> Self {
+        let matrix = [
+            [0.0, 0.0, 0.0, color.a],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+        ];
+        let adjust = [color.r, color.g, color.b, 0.0];
+        Self { matrix, adjust }
     }
 }
 
@@ -143,6 +155,11 @@ impl Instance {
                     shader_location: 9,
                     format: wgpu::VertexFormat::Float32x4,
                 },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 36]>() as wgpu::BufferAddress,
+                    shader_location: 10,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
             ],
         }
     }
@@ -150,45 +167,22 @@ impl Instance {
 
 pub(crate) struct Renderer {
     render_pipeline: RenderPipeline,
-    pub sampler: Sampler,
-    pub texture_bind_group_layout: BindGroupLayout,
     vertex_buffer: Buffer,
     index_buffer: Buffer,
 }
 
 impl Renderer {
-    pub(crate) fn new(context: &WgpuContext, camera: &Camera) -> Self {
+    pub(crate) fn new(
+        context: &WgpuContext,
+        texture_context: &TextureContext,
+        camera: &Camera,
+    ) -> Self {
         let shader = context
             .device
             .create_shader_module(&wgpu::ShaderModuleDescriptor {
                 label: Some("Shader"),
                 source: wgpu::ShaderSource::Wgsl(include_str!("shaders/render.wgsl").into()),
             });
-
-        let texture_bind_group_layout =
-            context
-                .device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    entries: &[
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Texture {
-                                multisampled: false,
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler(SamplerBindingType::Filtering),
-                            count: None,
-                        },
-                    ],
-                    label: Some("texture_bind_group_layout"),
-                });
 
         let render_pipeline_layout =
             context
@@ -197,7 +191,7 @@ impl Renderer {
                     label: Some("Texture Render Pipeline Layout"),
                     bind_group_layouts: &[
                         &camera.camera_bind_group_layout,
-                        &texture_bind_group_layout,
+                        &texture_context.texture_bind_group_layout,
                     ],
                     push_constant_ranges: &[],
                 });
@@ -214,11 +208,9 @@ impl Renderer {
                         buffers: &[Vertex::description(), Instance::description()],
                     },
                     fragment: Some(wgpu::FragmentState {
-                        // 3.
                         module: &shader,
                         entry_point: "fs_main",
                         targets: &[wgpu::ColorTargetState {
-                            // 4.
                             format: context.config.format,
                             blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                             write_mask: wgpu::ColorWrites::ALL,
@@ -229,11 +221,8 @@ impl Renderer {
                         strip_index_format: None,
                         front_face: wgpu::FrontFace::Ccw,
                         cull_mode: Some(wgpu::Face::Back),
-                        // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
                         polygon_mode: wgpu::PolygonMode::Fill,
-                        // Requires Features::DEPTH_CLAMPING
                         unclipped_depth: false,
-                        // Requires Features::CONSERVATIVE_RASTERIZATION
                         conservative: false,
                     },
                     depth_stencil: None,
@@ -244,16 +233,6 @@ impl Renderer {
                     },
                     multiview: None,
                 });
-
-        let sampler = context.device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
 
         let vertices = [
             Vertex {
@@ -284,8 +263,6 @@ impl Renderer {
 
         Self {
             render_pipeline,
-            sampler,
-            texture_bind_group_layout,
             vertex_buffer,
             index_buffer,
         }

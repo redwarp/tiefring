@@ -1,6 +1,6 @@
 use std::{path::Path, rc::Rc, sync::atomic::AtomicUsize};
 
-use wgpu::{BindGroup, BindGroupLayout, Sampler};
+use wgpu::{BindGroup, BindGroupLayout, Sampler, SamplerBindingType};
 
 use crate::{Canvas, Rect, SizeInPx, WgpuContext};
 
@@ -17,9 +17,9 @@ impl Sprite {
         S: Into<SizeInPx> + Copy,
     {
         let texture = Rc::new(Texture::new(
-            &canvas.wgpu_context,
-            &canvas.renderer.texture_bind_group_layout,
-            &canvas.renderer.sampler,
+            &canvas.wgpu_context.borrow(),
+            &canvas.texture_context.texture_bind_group_layout,
+            &canvas.texture_context.sampler,
             rgba,
             dimensions.into(),
         ));
@@ -67,9 +67,9 @@ impl TileSet {
         TS: Into<SizeInPx> + Copy,
     {
         let texture = Rc::new(Texture::new(
-            &canvas.wgpu_context,
-            &canvas.renderer.texture_bind_group_layout,
-            &canvas.renderer.sampler,
+            &canvas.wgpu_context.borrow(),
+            &canvas.texture_context.texture_bind_group_layout,
+            &canvas.texture_context.sampler,
             rgba,
             dimensions.into(),
         ));
@@ -240,6 +240,55 @@ impl Texture {
             id: TextureId(id),
             texture: wgpu_texture,
             texture_bind_group,
+        }
+    }
+}
+
+pub(crate) struct TextureContext {
+    pub texture_bind_group_layout: BindGroupLayout,
+    pub sampler: Sampler,
+}
+
+impl TextureContext {
+    pub fn new(context: &WgpuContext) -> Self {
+        let texture_bind_group_layout =
+            context
+                .device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                multisampled: false,
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler(SamplerBindingType::Filtering),
+                            count: None,
+                        },
+                    ],
+                    label: Some("texture_bind_group_layout"),
+                });
+
+        let sampler = context.device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
+        Self {
+            texture_bind_group_layout,
+            sampler,
         }
     }
 }

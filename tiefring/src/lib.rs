@@ -1,4 +1,4 @@
-use std::{path::Path, rc::Rc};
+use std::{cell::RefCell, path::Path, rc::Rc};
 
 use cache::{BufferCache, ReusableBuffer};
 use camera::{Camera, CameraSettings};
@@ -6,8 +6,8 @@ use camera::{Camera, CameraSettings};
 use glam::{Mat4, Vec3};
 use raw_window_handle::HasRawWindowHandle;
 use renderer::{ColorMatrix, RenderOperation, RenderPreper, Renderer};
-use sprite::{Sprite, Texture, TextureId};
-use text::{DrawTextOperation, Font, FontId, TextContext, TextDataPreper, TextRenderer};
+use sprite::{Sprite, Texture, TextureContext, TextureId};
+use text::{Font, TextDataPreper};
 use thiserror::Error;
 use wgpu::{CommandEncoder, RenderPass};
 
@@ -27,12 +27,11 @@ pub enum Error {
 }
 
 pub struct Canvas {
-    wgpu_context: WgpuContext,
+    wgpu_context: Rc<RefCell<WgpuContext>>,
     graphics: Graphics,
     camera: Camera,
     pub(crate) canvas_settings: CanvasSettings,
-    text_context: TextContext,
-    text_renderer: TextRenderer,
+    texture_context: Rc<TextureContext>,
     renderer: Renderer,
     draw_data: Vec<DrawData>,
     buffer_cache: BufferCache,
@@ -49,9 +48,9 @@ impl Canvas {
     where
         W: HasRawWindowHandle,
     {
-        let wgpu_context = WgpuContext::new(window, width, height).await?;
+        let wgpu_context = Rc::new(RefCell::new(WgpuContext::new(window, width, height).await?));
         let camera = Camera::new(
-            &wgpu_context,
+            &wgpu_context.borrow(),
             CameraSettings {
                 scale: canvas_settings.scale,
                 translation: Position::new(0.0, 0.0),
@@ -59,21 +58,26 @@ impl Canvas {
                 height,
             },
         );
-        let text_context = TextContext::new(&wgpu_context);
-        let text_renderer = TextRenderer::new(&wgpu_context, &text_context, &camera);
-        let renderer = Renderer::new(&wgpu_context, &camera);
+        let texture_context = Rc::new(TextureContext::new(&wgpu_context.borrow()));
+        let renderer = Renderer::new(&wgpu_context.borrow(), &texture_context, &camera);
         let draw_data = vec![];
         let buffer_cache = BufferCache::new();
 
         let white_texture = Rc::new(Texture::new(
-            &wgpu_context,
-            &renderer.texture_bind_group_layout,
-            &renderer.sampler,
+            &wgpu_context.borrow(),
+            &texture_context.texture_bind_group_layout,
+            &texture_context.sampler,
             &[255, 255, 255, 255],
             SizeInPx::new(1, 1),
         ));
 
-        let graphics = Graphics::new(width, height, white_texture);
+        let graphics = Graphics::new(
+            width,
+            height,
+            white_texture,
+            wgpu_context.clone(),
+            texture_context.clone(),
+        );
         let draw_data_prepers = DrawDataPrepers::new();
 
         Ok(Canvas {
@@ -81,8 +85,7 @@ impl Canvas {
             graphics,
             camera,
             canvas_settings,
-            text_context,
-            text_renderer,
+            texture_context,
             renderer,
             draw_data,
             buffer_cache,
@@ -94,8 +97,9 @@ impl Canvas {
     where
         F: FnOnce(&mut Graphics),
     {
+        let wgpu_context = self.wgpu_context.borrow();
         let mut encoder: CommandEncoder =
-            self.wgpu_context
+            wgpu_context
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("Render Encoder"),
@@ -106,16 +110,15 @@ impl Canvas {
             self.graphics.operation_blocks.push(operation_block);
         }
 
-        let surface_texture = self
-            .wgpu_context
+        let surface_texture = wgpu_context
             .surface
             .get_current_texture()
             .map_err(Error::RenderingFailed)?;
-        let view = self
-            .wgpu_context
+        let view = wgpu_context
             .buffer_texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
+        drop(wgpu_context);
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
@@ -138,7 +141,7 @@ impl Canvas {
 
         encoder.copy_texture_to_texture(
             wgpu::ImageCopyTexture {
-                texture: &self.wgpu_context.buffer_texture,
+                texture: &self.wgpu_context.borrow().buffer_texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
@@ -150,35 +153,38 @@ impl Canvas {
                 aspect: wgpu::TextureAspect::All,
             },
             wgpu::Extent3d {
-                width: self.wgpu_context.size.width,
-                height: self.wgpu_context.size.height,
+                width: self.wgpu_context.borrow().size.width,
+                height: self.wgpu_context.borrow().size.height,
                 depth_or_array_layers: 1,
             },
         );
 
-        self.wgpu_context.queue.submit(Some(encoder.finish()));
+        self.wgpu_context
+            .borrow()
+            .queue
+            .submit(Some(encoder.finish()));
         surface_texture.present();
 
         Ok(())
     }
 
     pub fn redraw_last(&mut self) -> Result<(), Error> {
+        let wgpu_context = self.wgpu_context.borrow();
         let mut encoder: CommandEncoder =
-            self.wgpu_context
+            wgpu_context
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("Redraw Encoder"),
                 });
 
-        let surface_texture = self
-            .wgpu_context
+        let surface_texture = wgpu_context
             .surface
             .get_current_texture()
             .map_err(Error::RenderingFailed)?;
 
         encoder.copy_texture_to_texture(
             wgpu::ImageCopyTexture {
-                texture: &self.wgpu_context.buffer_texture,
+                texture: &wgpu_context.buffer_texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
@@ -190,13 +196,13 @@ impl Canvas {
                 aspect: wgpu::TextureAspect::All,
             },
             wgpu::Extent3d {
-                width: self.wgpu_context.size.width,
-                height: self.wgpu_context.size.height,
+                width: wgpu_context.size.width,
+                height: wgpu_context.size.height,
                 depth_or_array_layers: 1,
             },
         );
 
-        self.wgpu_context.queue.submit(Some(encoder.finish()));
+        wgpu_context.queue.submit(Some(encoder.finish()));
         surface_texture.present();
 
         Ok(())
@@ -204,12 +210,13 @@ impl Canvas {
 
     pub fn set_size(&mut self, width: u32, height: u32) {
         self.graphics.size = SizeInPx { width, height };
-        self.wgpu_context.resize(width, height);
-        self.camera.set_size(&self.wgpu_context, width, height);
+        self.wgpu_context.borrow_mut().resize(width, height);
+        self.camera
+            .set_size(&self.wgpu_context.borrow(), width, height);
     }
 
     pub fn size(&self) -> SizeInPx {
-        self.wgpu_context.size
+        self.wgpu_context.borrow().size
     }
 
     pub fn scale(&self) -> f32 {
@@ -219,7 +226,7 @@ impl Canvas {
     pub fn set_scale(&mut self, scale: f32) {
         self.canvas_settings.scale = scale;
 
-        self.camera.set_scale(&self.wgpu_context, scale);
+        self.camera.set_scale(&self.wgpu_context.borrow(), scale);
     }
 
     pub fn translation(&self) -> Position {
@@ -227,19 +234,21 @@ impl Canvas {
     }
 
     pub fn set_translation(&mut self, translation: Position) {
-        self.camera.set_translation(&self.wgpu_context, translation)
+        self.camera
+            .set_translation(&self.wgpu_context.borrow(), translation)
     }
 
     pub async fn screenshot<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
+        let wgpu_context = self.wgpu_context.borrow();
         let mut encoder: CommandEncoder =
-            self.wgpu_context
+            wgpu_context
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("Screenshot Encoder"),
                 });
 
-        let output_buffer_size = self.wgpu_context.size.width as u64
-            * self.wgpu_context.size.height as u64
+        let output_buffer_size = wgpu_context.size.width as u64
+            * wgpu_context.size.height as u64
             * std::mem::size_of::<u32>() as u64;
         let output_buffer_desc = wgpu::BufferDescriptor {
             size: output_buffer_size,
@@ -247,11 +256,11 @@ impl Canvas {
             label: None,
             mapped_at_creation: false,
         };
-        let output_buffer = self.wgpu_context.device.create_buffer(&output_buffer_desc);
+        let output_buffer = wgpu_context.device.create_buffer(&output_buffer_desc);
 
-        let texture = &self.wgpu_context.buffer_texture;
+        let texture = &wgpu_context.buffer_texture;
 
-        let SizeInPx { width, height } = self.wgpu_context.size;
+        let SizeInPx { width, height } = wgpu_context.size;
 
         let copy_size = wgpu::Extent3d {
             width,
@@ -276,12 +285,12 @@ impl Canvas {
             },
             copy_size,
         );
-        self.wgpu_context.queue.submit(Some(encoder.finish()));
+        wgpu_context.queue.submit(Some(encoder.finish()));
 
         {
             let buffer_slice = output_buffer.slice(..);
             let mapping = buffer_slice.map_async(wgpu::MapMode::Read);
-            self.wgpu_context.device.poll(wgpu::Maintain::Wait);
+            wgpu_context.device.poll(wgpu::Maintain::Wait);
             mapping.await.unwrap();
 
             let data = buffer_slice.get_mapped_range();
@@ -305,14 +314,6 @@ impl Canvas {
     fn cleanup_draw_calls(&mut self) {
         for draw_data in self.draw_data.drain(..) {
             match draw_data {
-                DrawData::Text {
-                    vertex_buffer,
-                    index_buffer,
-                    ..
-                } => {
-                    self.buffer_cache.release_buffer(vertex_buffer);
-                    self.buffer_cache.release_buffer(index_buffer);
-                }
                 DrawData::Render {
                     instance_buffer, ..
                 } => self.buffer_cache.release_buffer(instance_buffer),
@@ -331,11 +332,8 @@ impl Canvas {
                 .operation_blocks
                 .drain(..)
                 .filter_map(|operation_block| {
-                    self.draw_data_prepers.prepare(
-                        &self.wgpu_context,
-                        &self.text_context,
-                        operation_block,
-                    )
+                    self.draw_data_prepers
+                        .prepare(&self.wgpu_context.borrow(), operation_block)
                 }),
         );
 
@@ -348,18 +346,6 @@ impl Canvas {
 
         for draw_data in &self.draw_data {
             match draw_data {
-                DrawData::Text {
-                    vertex_buffer,
-                    index_buffer,
-                    count,
-                    texture,
-                } => self.text_renderer.render(
-                    render_pass,
-                    vertex_buffer,
-                    index_buffer,
-                    *count,
-                    texture,
-                ),
                 DrawData::Render {
                     instance_buffer,
                     count,
@@ -397,36 +383,24 @@ pub struct Graphics {
     size: SizeInPx,
     translation: Option<Position>,
     white_texture: Rc<Texture>,
+    texture_context: Rc<TextureContext>,
+    wgpu_context: Rc<RefCell<WgpuContext>>,
+    text_data_preper: TextDataPreper,
 }
 
 struct OperationBlock {
     operation_type: DrawOperationType,
-    draw_text_operations: Vec<DrawTextOperation>,
     render_operations: Vec<RenderOperation>,
-    texture: Option<Rc<Texture>>,
+    texture: Rc<Texture>,
 }
 
 impl OperationBlock {
-    fn new(operation_type: DrawOperationType) -> Self {
-        OperationBlock {
-            operation_type,
-            draw_text_operations: vec![],
-            render_operations: vec![],
-            texture: None,
-        }
-    }
-
     fn with_texture(texture: Rc<Texture>) -> Self {
         OperationBlock {
             operation_type: DrawOperationType::ExpRect(texture.id),
-            draw_text_operations: vec![],
             render_operations: vec![],
-            texture: Some(texture),
+            texture: texture,
         }
-    }
-
-    fn push_draw_text_operation(&mut self, draw_text_operation: DrawTextOperation) {
-        self.draw_text_operations.push(draw_text_operation);
     }
 
     fn push_render_operation(&mut self, render_operation: RenderOperation) {
@@ -435,12 +409,6 @@ impl OperationBlock {
 }
 
 enum DrawData {
-    Text {
-        vertex_buffer: ReusableBuffer,
-        index_buffer: ReusableBuffer,
-        count: u32,
-        texture: Rc<Texture>,
-    },
     Render {
         instance_buffer: ReusableBuffer,
         count: u32,
@@ -449,13 +417,22 @@ enum DrawData {
 }
 
 impl Graphics {
-    fn new(width: u32, height: u32, white_texture: Rc<Texture>) -> Self {
+    fn new(
+        width: u32,
+        height: u32,
+        white_texture: Rc<Texture>,
+        wgpu_context: Rc<RefCell<WgpuContext>>,
+        texture_context: Rc<TextureContext>,
+    ) -> Self {
         Graphics {
             current_operation_block: None,
             operation_blocks: Vec::new(),
             size: SizeInPx { width, height },
             translation: None,
             white_texture,
+            texture_context,
+            wgpu_context,
+            text_data_preper: TextDataPreper::new(),
         }
     }
 
@@ -474,7 +451,7 @@ impl Graphics {
             color_matrix,
             tex_coords,
         };
-        self.get_operation_block_2(&self.white_texture.clone())
+        self.get_operation_block(&self.white_texture.clone())
             .push_render_operation(operation);
     }
 
@@ -503,7 +480,7 @@ impl Graphics {
             color_matrix,
             tex_coords,
         };
-        self.get_operation_block_2(&sprite.texture)
+        self.get_operation_block(&sprite.texture)
             .push_render_operation(operation);
     }
 
@@ -517,20 +494,22 @@ impl Graphics {
     ) where
         T: Into<String>,
     {
-        let position = if let Some(translation) = self.translation {
-            position.translated(translation.x, translation.y)
-        } else {
-            position
-        };
-        let text: String = text.into();
         let font_for_px = font.get_font_for_px(px);
-        self.get_operation_block(DrawOperationType::Text(FontId(font.font.file_hash(), px)))
-            .push_draw_text_operation(DrawTextOperation {
-                font_for_px,
-                position,
-                text,
-                color,
-            });
+        let mut operations = self.text_data_preper.render_operation(
+            text.into(),
+            color,
+            position,
+            &font_for_px,
+            &self.wgpu_context.borrow(),
+            &self.texture_context,
+        );
+
+        let texture = font_for_px
+            .borrow_mut()
+            .get_or_create_texture(&self.wgpu_context.borrow(), &self.texture_context);
+        self.get_operation_block(&texture)
+            .render_operations
+            .append(&mut operations);
     }
 
     pub fn with_translation<F>(&mut self, translation: Position, function: F)
@@ -551,21 +530,7 @@ impl Graphics {
         self.operation_blocks.clear();
     }
 
-    fn get_operation_block(&mut self, current_operation: DrawOperationType) -> &mut OperationBlock {
-        let need_new = !matches!(&self.current_operation_block, Some(operation_block) if operation_block.operation_type == current_operation);
-        if need_new {
-            if let Some(operation_block) = self.current_operation_block.take() {
-                self.operation_blocks.push(operation_block);
-            }
-
-            let operation_block = OperationBlock::new(current_operation);
-            self.current_operation_block = Some(operation_block);
-        }
-
-        self.current_operation_block.as_mut().unwrap()
-    }
-
-    fn get_operation_block_2(&mut self, texture: &Rc<Texture>) -> &mut OperationBlock {
+    fn get_operation_block(&mut self, texture: &Rc<Texture>) -> &mut OperationBlock {
         let current_operation = DrawOperationType::ExpRect(texture.id);
         let need_new = !matches!(&self.current_operation_block, Some(operation_block) if operation_block.operation_type == current_operation);
         if need_new {
@@ -582,7 +547,6 @@ impl Graphics {
 
 #[derive(PartialEq, Debug)]
 enum DrawOperationType {
-    Text(FontId),
     ExpRect(TextureId),
 }
 
@@ -731,10 +695,6 @@ impl Color {
     pub fn rgba(r: f32, g: f32, b: f32, a: f32) -> Self {
         Self { r, g, b, a }
     }
-
-    fn as_float_array(&self) -> [f32; 4] {
-        [self.r, self.g, self.b, self.a]
-    }
 }
 
 #[derive(Debug)]
@@ -841,7 +801,6 @@ trait DrawDataPreper<O, C> {
 }
 
 struct DrawDataPrepers {
-    text_data_preper: TextDataPreper,
     render_preper: RenderPreper,
     buffer_cache: BufferCache,
 }
@@ -849,7 +808,6 @@ struct DrawDataPrepers {
 impl DrawDataPrepers {
     fn new() -> Self {
         Self {
-            text_data_preper: TextDataPreper::new(),
             render_preper: RenderPreper::new(),
             buffer_cache: BufferCache::new(),
         }
@@ -858,22 +816,14 @@ impl DrawDataPrepers {
     fn prepare(
         &mut self,
         wgpu_context: &WgpuContext,
-        text_context: &TextContext,
         operation_block: OperationBlock,
     ) -> Option<DrawData> {
-        match operation_block.operation_type {
-            DrawOperationType::Text(_) => self.text_data_preper.prepare(
-                &mut self.buffer_cache,
-                (wgpu_context, text_context),
-                &operation_block.draw_text_operations,
-            ),
-            DrawOperationType::ExpRect(_) => self.render_preper.prepare(
-                &mut self.buffer_cache,
-                wgpu_context,
-                operation_block.texture.expect("Should be set").clone(),
-                &operation_block.render_operations,
-            ),
-        }
+        self.render_preper.prepare(
+            &mut self.buffer_cache,
+            wgpu_context,
+            operation_block.texture.clone(),
+            &operation_block.render_operations,
+        )
     }
 }
 
@@ -881,7 +831,7 @@ pub(crate) struct RenderPosition(Mat4);
 
 impl From<Rect> for RenderPosition {
     fn from(rect: Rect) -> Self {
-        let position = Mat4::from_translation(Vec3::new(rect.left, rect.top, 1.0))
+        let position = Mat4::from_translation(Vec3::new(rect.left, rect.top, 0.0))
             * Mat4::from_scale(Vec3::new(rect.width(), rect.height(), 1.0));
         Self(position)
     }
