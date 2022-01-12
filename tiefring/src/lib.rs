@@ -7,7 +7,7 @@ use glam::{Mat4, Vec3};
 use raw_window_handle::HasRawWindowHandle;
 use renderer::{ColorMatrix, RenderOperation, RenderPreper, Renderer};
 use sprite::{Sprite, Texture, TextureContext};
-use text::{Font, TextDataPreper};
+use text::{Font, TextConverter};
 use thiserror::Error;
 use wgpu::{CommandEncoder, RenderPass};
 
@@ -386,7 +386,7 @@ pub struct Graphics {
     white_texture: Rc<Texture>,
     texture_context: Rc<TextureContext>,
     device_and_queue: Rc<DeviceAndQueue>,
-    text_data_preper: TextDataPreper,
+    text_converter: TextConverter,
     render_preper: RenderPreper,
     buffer_cache: BufferCache,
 }
@@ -408,7 +408,7 @@ impl Graphics {
             white_texture,
             texture_context,
             device_and_queue,
-            text_data_preper: TextDataPreper::new(),
+            text_converter: TextConverter::new(),
             render_preper: RenderPreper::new(),
             buffer_cache: BufferCache::new(),
         }
@@ -470,11 +470,11 @@ impl Graphics {
         position: Position,
         color: Color,
     ) where
-        T: Into<String>,
+        T: AsRef<str>,
     {
         let font_for_px = font.get_font_for_px(px);
-        let mut operations = self.text_data_preper.render_operation(
-            text.into(),
+        let mut operations = self.text_converter.render_operation(
+            text.as_ref(),
             color,
             position,
             &font_for_px,

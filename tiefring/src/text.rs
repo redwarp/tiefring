@@ -245,11 +245,11 @@ impl SizedFont {
     }
 }
 
-pub(crate) struct TextDataPreper {
+pub(crate) struct TextConverter {
     layout: Layout,
 }
 
-impl TextDataPreper {
+impl TextConverter {
     pub fn new() -> Self {
         Self {
             layout: Layout::new(CoordinateSystem::PositiveYDown),
@@ -257,10 +257,10 @@ impl TextDataPreper {
     }
 }
 
-impl TextDataPreper {
+impl TextConverter {
     pub fn render_operation(
         &mut self,
-        text: String,
+        text: &str,
         color: Color,
         position: Position,
         font_for_px: &Rc<RefCell<SizedFont>>,
@@ -286,7 +286,7 @@ impl TextDataPreper {
         let color_matrix = ColorMatrix::for_text(color);
 
         self.layout
-            .append(fonts, &TextStyle::new(text.as_str(), size as f32, 0));
+            .append(fonts, &TextStyle::new(text, size as f32, 0));
         let mut font_for_px = font_for_px.borrow_mut();
 
         let operations = self
