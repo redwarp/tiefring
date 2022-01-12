@@ -2,7 +2,7 @@ use std::{path::Path, rc::Rc, sync::atomic::AtomicUsize};
 
 use wgpu::{BindGroup, BindGroupLayout, Sampler, SamplerBindingType};
 
-use crate::{Canvas, Rect, SizeInPx, WgpuContext};
+use crate::{Canvas, DeviceAndQueue, Rect, SizeInPx};
 
 #[derive(Clone)]
 pub struct Sprite {
@@ -17,7 +17,7 @@ impl Sprite {
         S: Into<SizeInPx> + Copy,
     {
         let texture = Rc::new(Texture::new(
-            &canvas.wgpu_context.borrow(),
+            &canvas.wgpu_context.device_and_queue,
             &canvas.texture_context.texture_bind_group_layout,
             &canvas.texture_context.sampler,
             rgba,
@@ -67,7 +67,7 @@ impl TileSet {
         TS: Into<SizeInPx> + Copy,
     {
         let texture = Rc::new(Texture::new(
-            &canvas.wgpu_context.borrow(),
+            &canvas.wgpu_context.device_and_queue,
             &canvas.texture_context.texture_bind_group_layout,
             &canvas.texture_context.sampler,
             rgba,
@@ -173,7 +173,7 @@ pub(crate) static TEXTURE_INDEX: AtomicUsize = AtomicUsize::new(0);
 
 impl Texture {
     pub fn new(
-        wgpu_context: &WgpuContext,
+        device_and_queue: &DeviceAndQueue,
         texture_bind_group_layout: &BindGroupLayout,
         sampler: &Sampler,
         rgba: &[u8],
@@ -185,7 +185,7 @@ impl Texture {
             height: dimensions.height,
             depth_or_array_layers: 1,
         };
-        let wgpu_texture = wgpu_context
+        let wgpu_texture = device_and_queue
             .device
             .create_texture(&wgpu::TextureDescriptor {
                 size: texture_size,
@@ -197,7 +197,7 @@ impl Texture {
                 label: Some("texture"),
             });
 
-        wgpu_context.queue.write_texture(
+        device_and_queue.queue.write_texture(
             // Tells wgpu where to copy the pixel data
             wgpu::ImageCopyTexture {
                 texture: &wgpu_texture,
@@ -219,7 +219,7 @@ impl Texture {
         let texture_view = wgpu_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         let texture_bind_group: BindGroup =
-            wgpu_context
+            device_and_queue
                 .device
                 .create_bind_group(&wgpu::BindGroupDescriptor {
                     layout: texture_bind_group_layout,
@@ -250,9 +250,9 @@ pub(crate) struct TextureContext {
 }
 
 impl TextureContext {
-    pub fn new(context: &WgpuContext) -> Self {
+    pub fn new(device_and_queue: &DeviceAndQueue) -> Self {
         let texture_bind_group_layout =
-            context
+            device_and_queue
                 .device
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     entries: &[
@@ -276,15 +276,17 @@ impl TextureContext {
                     label: Some("texture_bind_group_layout"),
                 });
 
-        let sampler = context.device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
+        let sampler = device_and_queue
+            .device
+            .create_sampler(&wgpu::SamplerDescriptor {
+                address_mode_u: wgpu::AddressMode::ClampToEdge,
+                address_mode_v: wgpu::AddressMode::ClampToEdge,
+                address_mode_w: wgpu::AddressMode::ClampToEdge,
+                mag_filter: wgpu::FilterMode::Nearest,
+                min_filter: wgpu::FilterMode::Nearest,
+                mipmap_filter: wgpu::FilterMode::Nearest,
+                ..Default::default()
+            });
 
         Self {
             texture_bind_group_layout,

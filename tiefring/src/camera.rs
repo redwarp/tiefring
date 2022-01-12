@@ -1,7 +1,7 @@
 use glam::{Mat4, Vec3};
 use wgpu::{util::DeviceExt, BindGroup, BindGroupLayout, Buffer};
 
-use crate::{Position, WgpuContext};
+use crate::{DeviceAndQueue, Position};
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -28,13 +28,13 @@ pub struct Camera {
 }
 
 impl Camera {
-    pub(crate) fn new(wgpu_context: &WgpuContext, camera_settings: CameraSettings) -> Self {
+    pub(crate) fn new(device_and_queue: &DeviceAndQueue, camera_settings: CameraSettings) -> Self {
         let camera_uniform = CameraUniform {
             matrix: Camera::matrix(&camera_settings),
         };
 
         let camera_buffer =
-            wgpu_context
+            device_and_queue
                 .device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("Projection matrix buffer"),
@@ -43,7 +43,7 @@ impl Camera {
                 });
 
         let camera_bind_group_layout =
-            wgpu_context
+            device_and_queue
                 .device
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     entries: &[wgpu::BindGroupLayoutEntry {
@@ -58,16 +58,17 @@ impl Camera {
                     }],
                     label: Some("camera_bind_group_layout"),
                 });
-        let camera_bind_group = wgpu_context
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &camera_bind_group_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: camera_buffer.as_entire_binding(),
-                }],
-                label: Some("camera_bind_group"),
-            });
+        let camera_bind_group =
+            device_and_queue
+                .device
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    layout: &camera_bind_group_layout,
+                    entries: &[wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: camera_buffer.as_entire_binding(),
+                    }],
+                    label: Some("camera_bind_group"),
+                });
 
         Camera {
             camera_settings,
@@ -77,28 +78,28 @@ impl Camera {
         }
     }
 
-    pub(crate) fn set_scale(&mut self, wgpu_context: &WgpuContext, scale: f32) {
+    pub(crate) fn set_scale(&mut self, queue: &wgpu::Queue, scale: f32) {
         self.camera_settings.scale = scale;
-        self.recalculate(wgpu_context);
+        self.recalculate(queue);
     }
 
-    pub(crate) fn set_size(&mut self, wgpu_context: &WgpuContext, width: u32, height: u32) {
+    pub(crate) fn set_size(&mut self, queue: &wgpu::Queue, width: u32, height: u32) {
         self.camera_settings.width = width;
         self.camera_settings.height = height;
-        self.recalculate(wgpu_context);
+        self.recalculate(queue);
     }
 
-    pub(crate) fn set_translation(&mut self, wgpu_context: &WgpuContext, translation: Position) {
+    pub(crate) fn set_translation(&mut self, queue: &wgpu::Queue, translation: Position) {
         self.camera_settings.translation = translation;
-        self.recalculate(wgpu_context);
+        self.recalculate(queue);
     }
 
-    fn recalculate(&mut self, wgpu_context: &WgpuContext) {
+    fn recalculate(&mut self, queue: &wgpu::Queue) {
         let camera_uniform = CameraUniform {
             matrix: Camera::matrix(&self.camera_settings),
         };
 
-        wgpu_context.queue.write_buffer(
+        queue.write_buffer(
             &self.camera_buffer,
             0,
             bytemuck::cast_slice(&[camera_uniform]),

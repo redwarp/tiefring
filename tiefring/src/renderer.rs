@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use glam::Mat4;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
@@ -10,7 +8,7 @@ use crate::{
     cache::{Resetable, ReusableBuffer},
     camera::Camera,
     sprite::{Texture, TextureContext},
-    Color, DrawData, Rect, RenderPosition, WgpuContext,
+    Color, DeviceAndQueue, DrawData, OperationBlock, Rect, RenderPosition,
 };
 
 #[repr(C)]
@@ -173,11 +171,11 @@ pub(crate) struct Renderer {
 
 impl Renderer {
     pub(crate) fn new(
-        context: &WgpuContext,
+        device_and_queue: &DeviceAndQueue,
         texture_context: &TextureContext,
         camera: &Camera,
     ) -> Self {
-        let shader = context
+        let shader = device_and_queue
             .device
             .create_shader_module(&wgpu::ShaderModuleDescriptor {
                 label: Some("Shader"),
@@ -185,7 +183,7 @@ impl Renderer {
             });
 
         let render_pipeline_layout =
-            context
+            device_and_queue
                 .device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Texture Render Pipeline Layout"),
@@ -197,7 +195,7 @@ impl Renderer {
                 });
 
         let render_pipeline =
-            context
+            device_and_queue
                 .device
                 .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                     label: Some("Texture Render Pipeline"),
@@ -211,7 +209,7 @@ impl Renderer {
                         module: &shader,
                         entry_point: "fs_main",
                         targets: &[wgpu::ColorTargetState {
-                            format: context.config.format,
+                            format: wgpu::TextureFormat::Bgra8Unorm,
                             blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                             write_mask: wgpu::ColorWrites::ALL,
                         }],
@@ -248,18 +246,22 @@ impl Renderer {
                 position: [1.0, 0.0],
             },
         ];
-        let vertex_buffer = context.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&vertices[..]),
-            usage: BufferUsages::VERTEX,
-        });
+        let vertex_buffer = device_and_queue
+            .device
+            .create_buffer_init(&BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(&vertices[..]),
+                usage: BufferUsages::VERTEX,
+            });
 
         let indices: [u16; 6] = [0, 1, 2, 2, 3, 0];
-        let index_buffer = context.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&indices[..]),
-            usage: BufferUsages::INDEX,
-        });
+        let index_buffer = device_and_queue
+            .device
+            .create_buffer_init(&BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(&indices[..]),
+                usage: BufferUsages::INDEX,
+            });
 
         Self {
             render_pipeline,
@@ -302,30 +304,34 @@ impl RenderPreper {
     pub fn prepare(
         &mut self,
         buffer_cache: &mut crate::cache::BufferCache,
-        context: &WgpuContext,
-        texture: Rc<Texture>,
-        operations: &[RenderOperation],
-    ) -> DrawData {
-        let count = operations.len();
+        device_and_queue: &DeviceAndQueue,
+        operation_block: OperationBlock,
+    ) -> Option<DrawData> {
+        let count = operation_block.operations.len();
+        if count == 0 {
+            return None;
+        }
+
         self.instances.reset_with_capacity(count);
-        self.instances.extend(operations.iter().map(|operation| {
-            Instance::new(
-                &operation.tex_coords,
-                &operation.position,
-                &operation.color_matrix,
-            )
-        }));
+        self.instances
+            .extend(operation_block.operations.iter().map(|operation| {
+                Instance::new(
+                    &operation.tex_coords,
+                    &operation.position,
+                    &operation.color_matrix,
+                )
+            }));
 
         let instance_buffer = buffer_cache.get_buffer(
-            context,
+            device_and_queue,
             bytemuck::cast_slice(&self.instances[..]),
             BufferUsages::VERTEX,
         );
 
-        DrawData {
+        Some(DrawData {
             instance_buffer,
             count: count as u32,
-            texture,
-        }
+            texture: operation_block.texture,
+        })
     }
 }

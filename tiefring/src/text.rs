@@ -8,7 +8,7 @@ use crate::{
     renderer::{ColorMatrix, RenderOperation},
     sprite::Texture,
     sprite::{TextureContext, TextureId, TEXTURE_INDEX},
-    Color, Position, Rect, WgpuContext,
+    Color, DeviceAndQueue, Position, Rect,
 };
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, Debug)]
@@ -84,13 +84,13 @@ impl SizedFont {
 
     pub(crate) fn get_or_create_texture(
         &mut self,
-        wgpu_context: &WgpuContext,
+        device_and_queue: &DeviceAndQueue,
         texture_context: &TextureContext,
     ) -> Rc<Texture> {
         self.texture
             .get_or_insert_with(|| {
                 Rc::new(SizedFont::font_texture(
-                    wgpu_context,
+                    device_and_queue,
                     &texture_context.texture_bind_group_layout,
                     &texture_context.sampler,
                 ))
@@ -101,13 +101,13 @@ impl SizedFont {
     fn get_or_create_character(
         &mut self,
         char: char,
-        wgpu_context: &WgpuContext,
+        device_and_queue: &DeviceAndQueue,
         texture_context: &TextureContext,
     ) -> Option<&CharacterReference> {
         if self.contains(&char) {
             self.characters.get(&char)
         } else {
-            self.create_character(char, wgpu_context, texture_context)
+            self.create_character(char, device_and_queue, texture_context)
         }
     }
 
@@ -118,7 +118,7 @@ impl SizedFont {
     fn create_character(
         &mut self,
         char: char,
-        wgpu_context: &WgpuContext,
+        device_and_queue: &DeviceAndQueue,
         texture_context: &TextureContext,
     ) -> Option<&CharacterReference> {
         let (metrics, bitmap) = self.font.rasterize(char, self.px as f32);
@@ -145,13 +145,13 @@ impl SizedFont {
         if let Some(packed) = packed {
             let texture = self.texture.get_or_insert_with(|| {
                 Rc::new(SizedFont::font_texture(
-                    wgpu_context,
+                    device_and_queue,
                     &texture_context.texture_bind_group_layout,
                     &texture_context.sampler,
                 ))
             });
 
-            wgpu_context.queue.write_texture(
+            device_and_queue.queue.write_texture(
                 wgpu::ImageCopyTexture {
                     texture: &texture.texture,
                     mip_level: 0,
@@ -194,7 +194,7 @@ impl SizedFont {
     }
 
     fn font_texture(
-        wgpu_context: &WgpuContext,
+        device_and_queue: &DeviceAndQueue,
         texture_bind_group_layout: &BindGroupLayout,
         sampler: &Sampler,
     ) -> Texture {
@@ -205,7 +205,7 @@ impl SizedFont {
             depth_or_array_layers: 1,
         };
 
-        let wgpu_texture = wgpu_context
+        let wgpu_texture = device_and_queue
             .device
             .create_texture(&wgpu::TextureDescriptor {
                 size: texture_size,
@@ -220,7 +220,7 @@ impl SizedFont {
         let texture_view = wgpu_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         let texture_bind_group: BindGroup =
-            wgpu_context
+            device_and_queue
                 .device
                 .create_bind_group(&wgpu::BindGroupDescriptor {
                     layout: texture_bind_group_layout,
@@ -264,7 +264,7 @@ impl TextDataPreper {
         color: Color,
         position: Position,
         font_for_px: &Rc<RefCell<SizedFont>>,
-        wgpu_context: &WgpuContext,
+        device_and_queue: &DeviceAndQueue,
         texture_context: &TextureContext,
     ) -> Vec<RenderOperation> {
         let char_count: usize = text.len();
@@ -298,7 +298,7 @@ impl TextDataPreper {
                     Rect::from_xywh(glyph.x, glyph.y, glyph.width as f32, glyph.height as f32);
 
                 font_for_px
-                    .get_or_create_character(glyph.parent, wgpu_context, texture_context)
+                    .get_or_create_character(glyph.parent, device_and_queue, texture_context)
                     .map(|character| RenderOperation {
                         tex_coords: character.tex_coords,
                         position: position.into(),

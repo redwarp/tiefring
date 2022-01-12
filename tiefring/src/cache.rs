@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, mem::size_of};
 
 use wgpu::{util::DeviceExt, Buffer, BufferSlice, BufferUsages, Device, Queue};
 
-use crate::WgpuContext;
+use crate::DeviceAndQueue;
 
 #[derive(Debug)]
 pub(crate) struct BufferCache {
@@ -22,7 +22,7 @@ impl BufferCache {
 
     pub fn get_buffer(
         &mut self,
-        wgpu_context: &WgpuContext,
+        device_and_queue: &DeviceAndQueue,
         content: &[u8],
         usage: BufferUsages,
     ) -> ReusableBuffer {
@@ -31,11 +31,11 @@ impl BufferCache {
         let buffer = self.buffer_with_capacity(capacity, usage);
 
         if let Some(mut buffer) = buffer {
-            buffer.update(&wgpu_context.queue, content);
+            buffer.update(&device_and_queue.queue, content);
             buffer
         } else {
             ReusableBuffer::new(
-                &wgpu_context.device,
+                &device_and_queue.device,
                 content,
                 usage | BufferUsages::COPY_DST,
             )
