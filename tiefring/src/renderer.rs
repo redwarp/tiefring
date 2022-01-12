@@ -11,7 +11,7 @@ use crate::{
     cache::{Resetable, ReusableBuffer},
     camera::Camera,
     sprite::Texture,
-    Color, DrawData, Rect, WgpuContext,
+    Color, DrawData, Rect, RenderPosition, WgpuContext,
 };
 
 #[repr(C)]
@@ -77,7 +77,7 @@ pub struct Instance {
 }
 
 impl Instance {
-    fn new(tex_coords: &Rect, position: &Mat4, color_matrix: &ColorMatrix) -> Self {
+    fn new(tex_coords: &Rect, position: &RenderPosition, color_matrix: &ColorMatrix) -> Self {
         let tex_coords = [
             tex_coords.right - tex_coords.left,
             tex_coords.left,
@@ -87,7 +87,7 @@ impl Instance {
 
         Self {
             tex_coords,
-            position_matrix: PositionMatrix::from_mat4(position),
+            position_matrix: PositionMatrix::from_mat4(&position.0),
             color_matrix: *color_matrix,
         }
     }
@@ -309,7 +309,7 @@ impl Renderer {
 
 pub(crate) struct RenderOperation {
     pub tex_coords: Rect,
-    pub position: Mat4,
+    pub position: RenderPosition,
     pub color_matrix: ColorMatrix,
 }
 
