@@ -475,6 +475,11 @@ impl Graphics {
     ) where
         T: AsRef<str>,
     {
+        let position = if let Some(translation) = self.translation {
+            position.translated(translation.x, translation.y)
+        } else {
+            position
+        };
         let font_for_px = font.get_font_for_px(px);
         let mut operations = self.text_converter.render_operation(
             text.as_ref(),
