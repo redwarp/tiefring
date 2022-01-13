@@ -109,7 +109,8 @@ fn main() {
                         );
                         graphics
                             .draw_sprite_in_rect(&alien_1, [211, 100, 345, 288])
-                            .rotate(angle);
+                            .rotate(angle)
+                            .translate(100.0, 0.0);
                         graphics.draw_sprite(&alien_1, Position { x: 150.0, y: 200.0 });
 
                         let (x, y) = tile_set.tile_count();
