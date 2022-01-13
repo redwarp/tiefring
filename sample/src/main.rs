@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use tiefring::{
     sprite::{Sprite, TileSet},
     text::Font,
@@ -66,6 +68,7 @@ fn main() {
 
     window.set_visible(true);
     let mut translation = Position::new(0.0, 0.0);
+    let mut angle = PI / 4.0;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -104,7 +107,9 @@ fn main() {
                                 a: 1.0,
                             },
                         );
-                        graphics.draw_sprite_in_rect(&alien_1, [211, 100, 345, 288]);
+                        graphics
+                            .draw_sprite_in_rect(&alien_1, [211, 100, 345, 288])
+                            .rotate(angle);
                         graphics.draw_sprite(&alien_1, Position { x: 150.0, y: 200.0 });
 
                         let (x, y) = tile_set.tile_count();
@@ -117,7 +122,7 @@ fn main() {
                                         x: i as f32 * 16.0 + 300.0,
                                         y: j as f32 * 16.0,
                                     },
-                                )
+                                );
                             }
                         }
 
@@ -180,6 +185,10 @@ fn main() {
                 translate(-10.0, 0.0, &mut translation);
             } else if input.key_pressed(VirtualKeyCode::Right) {
                 translate(10.0, 0.0, &mut translation);
+            } else if input.key_pressed(VirtualKeyCode::Q) {
+                angle -= PI / 42.0
+            } else if input.key_pressed(VirtualKeyCode::E) {
+                angle += PI / 42.0
             }
 
             if input.key_pressed(VirtualKeyCode::P) {

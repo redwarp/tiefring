@@ -268,7 +268,7 @@ impl Terrain {
                         y: j as f32 * GRID_STEP,
                         x: i as f32 * GRID_STEP,
                     },
-                )
+                );
             }
         }
     }

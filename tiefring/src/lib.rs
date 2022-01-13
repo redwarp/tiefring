@@ -366,8 +366,9 @@ impl OperationBlock {
         }
     }
 
-    fn push_render_operation(&mut self, render_operation: RenderOperation) {
+    fn push_render_operation(&mut self, render_operation: RenderOperation) -> &mut RenderOperation {
         self.operations.push(render_operation);
+        self.operations.last_mut().expect("Just pushed an item")
     }
 }
 
@@ -379,7 +380,6 @@ struct DrawData {
 
 pub struct Graphics {
     current_operation_block: Option<OperationBlock>,
-    operation_blocks: Vec<OperationBlock>,
     draw_datas: Vec<DrawData>,
     size: SizeInPx,
     translation: Option<Position>,
@@ -401,7 +401,6 @@ impl Graphics {
     ) -> Self {
         Graphics {
             current_operation_block: None,
-            operation_blocks: Vec::new(),
             draw_datas: vec![],
             size: SizeInPx { width, height },
             translation: None,
@@ -414,7 +413,7 @@ impl Graphics {
         }
     }
 
-    pub fn draw_rect<R: Into<Rect>>(&mut self, rect: R, color: Color) {
+    pub fn draw_rect<R: Into<Rect>>(&mut self, rect: R, color: Color) -> &mut RenderOperation {
         let tex_coords = Rect::new(0.0, 0.0, 1.0, 1.0);
 
         let rect: Rect = if let Some(translation) = self.translation {
@@ -430,20 +429,24 @@ impl Graphics {
             tex_coords,
         };
         self.get_operation_block(&self.white_texture.clone())
-            .push_render_operation(operation);
+            .push_render_operation(operation)
     }
 
-    pub fn draw_sprite(&mut self, sprite: &Sprite, position: Position) {
+    pub fn draw_sprite(&mut self, sprite: &Sprite, position: Position) -> &mut RenderOperation {
         let destination = Rect {
             left: position.x,
             top: position.y,
             right: position.x + sprite.dimensions.width as f32,
             bottom: position.y + sprite.dimensions.height as f32,
         };
-        self.draw_sprite_in_rect(sprite, destination);
+        self.draw_sprite_in_rect(sprite, destination)
     }
 
-    pub fn draw_sprite_in_rect<R: Into<Rect>>(&mut self, sprite: &Sprite, rect: R) {
+    pub fn draw_sprite_in_rect<R: Into<Rect>>(
+        &mut self,
+        sprite: &Sprite,
+        rect: R,
+    ) -> &mut RenderOperation {
         let tex_coords = sprite.tex_coords;
         let rect: Rect = if let Some(translation) = self.translation {
             rect.into().translated(translation.x, translation.y)
@@ -459,7 +462,7 @@ impl Graphics {
             tex_coords,
         };
         self.get_operation_block(&sprite.texture)
-            .push_render_operation(operation);
+            .push_render_operation(operation)
     }
 
     pub fn draw_text<T>(
@@ -507,7 +510,6 @@ impl Graphics {
         // We cleanup buffers that were not reused previously.
         self.buffer_cache.clear();
         self.current_operation_block = None;
-        self.operation_blocks.clear();
         for draw_data in self.draw_datas.drain(..) {
             self.buffer_cache.release_buffer(draw_data.instance_buffer);
         }
@@ -792,12 +794,25 @@ impl WgpuContext {
     }
 }
 
-pub(crate) struct RenderPosition(Mat4);
+pub(crate) struct RenderPosition {
+    transformation: Mat4,
+    scale: Position,
+}
+
+impl RenderPosition {
+    pub fn matrix(&self) -> Mat4 {
+        let scale = Mat4::from_scale(Vec3::new(self.scale.x, self.scale.y, 1.0));
+        self.transformation * scale
+    }
+}
 
 impl From<Rect> for RenderPosition {
     fn from(rect: Rect) -> Self {
-        let position = Mat4::from_translation(Vec3::new(rect.left, rect.top, 0.0))
-            * Mat4::from_scale(Vec3::new(rect.width(), rect.height(), 1.0));
-        Self(position)
+        let transformation = Mat4::from_translation(Vec3::new(rect.left, rect.top, 0.0));
+        let scale = Position::new(rect.width(), rect.height());
+        Self {
+            transformation,
+            scale,
+        }
     }
 }

@@ -1,4 +1,4 @@
-use glam::Mat4;
+use glam::{Mat4, Vec3};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     Buffer, BufferUsages, RenderPass, RenderPipeline, VertexBufferLayout,
@@ -97,7 +97,7 @@ impl Instance {
 
         Self {
             tex_coords,
-            position_matrix: PositionMatrix::from_mat4(&position.0),
+            position_matrix: PositionMatrix::from_mat4(&position.matrix()),
             color_matrix: *color_matrix,
         }
     }
@@ -286,10 +286,24 @@ impl Renderer {
     }
 }
 
-pub(crate) struct RenderOperation {
-    pub tex_coords: Rect,
-    pub position: RenderPosition,
-    pub color_matrix: ColorMatrix,
+pub struct RenderOperation {
+    pub(crate) tex_coords: Rect,
+    pub(crate) position: RenderPosition,
+    pub(crate) color_matrix: ColorMatrix,
+}
+
+impl RenderOperation {
+    pub fn rotate(&mut self, angle: f32) -> &mut Self {
+        let x = self.position.scale.x / 2.0;
+        let y = self.position.scale.y / 2.0;
+        let pre_translate = Mat4::from_translation(Vec3::new(x, y, 0.0));
+        let post_translate = Mat4::from_translation(Vec3::new(-x, -y, 0.0));
+        let rotation = Mat4::from_rotation_z(angle);
+        self.position.transformation =
+            self.position.transformation * pre_translate * rotation * post_translate;
+
+        self
+    }
 }
 
 pub(crate) struct RenderPreper {
