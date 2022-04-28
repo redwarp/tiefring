@@ -7,7 +7,7 @@ edition = "2021"
 [dependencies]
 tiefring = { path = "../tiefring" }
 winit = "0.26"
-winit_input_helper = "0.11"
+winit_input_helper = "0.12"
 pollster = "0.2"
 rand = "0.8"
 find_folder = "0.3"
