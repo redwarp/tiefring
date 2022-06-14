@@ -12,7 +12,7 @@ use tiefring::{
     Canvas, CanvasSettings, Color, Graphics, Rect, SizeInPx,
 };
 use winit::{
-    dpi::LogicalSize,
+    dpi::PhysicalSize,
     event::{Event, VirtualKeyCode},
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
@@ -624,7 +624,7 @@ fn main() {
     let event_loop = EventLoop::new();
     let mut input = WinitInputHelper::new();
     let window = {
-        let size = LogicalSize::new(GRID_STEP * WIDTH as f32, GRID_STEP * HEIGHT as f32);
+        let size = PhysicalSize::new(GRID_STEP * WIDTH as f32, GRID_STEP * HEIGHT as f32);
         WindowBuilder::new()
             .with_title("Snaky")
             .with_inner_size(size)
