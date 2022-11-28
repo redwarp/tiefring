@@ -4,7 +4,7 @@ use cache::{BufferCache, ReusableBuffer};
 use camera::{Camera, CameraSettings};
 
 use glam::{Mat4, Vec3};
-use raw_window_handle::HasRawWindowHandle;
+use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use renderer::{ColorMatrix, RenderOperation, RenderPreper, Renderer};
 use sprite::{Sprite, Texture, TextureContext};
 use text::{Font, TextConverter};
@@ -43,7 +43,7 @@ impl Canvas {
         canvas_settings: CanvasSettings,
     ) -> Result<Canvas, Error>
     where
-        W: HasRawWindowHandle,
+        W: HasRawWindowHandle + HasRawDisplayHandle,
     {
         let wgpu_context = WgpuContext::new(window, width, height).await?;
         let camera = Camera::new(
@@ -112,14 +112,14 @@ impl Canvas {
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
-                color_attachments: &[wgpu::RenderPassColorAttachment {
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(self.canvas_settings.background_color.into()),
                         store: true,
                     },
-                }],
+                })],
                 depth_stencil_attachment: None,
             });
 
@@ -290,12 +290,11 @@ impl Canvas {
 
         {
             let buffer_slice = output_buffer.slice(..);
-            let mapping = buffer_slice.map_async(wgpu::MapMode::Read);
+            buffer_slice.map_async(wgpu::MapMode::Read, |_v| {});
             self.wgpu_context
                 .device_and_queue
                 .device
                 .poll(wgpu::Maintain::Wait);
-            mapping.await.unwrap();
 
             let data = buffer_slice.get_mapped_range();
 
@@ -714,13 +713,13 @@ pub(crate) struct WgpuContext {
 impl WgpuContext {
     async fn new<W>(window: &W, width: u32, height: u32) -> Result<WgpuContext, Error>
     where
-        W: HasRawWindowHandle,
+        W: HasRawWindowHandle + HasRawDisplayHandle,
     {
         let instance = wgpu::Instance::new(wgpu::Backends::all());
         let surface = unsafe { instance.create_surface(window) };
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
+                power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })
@@ -745,6 +744,7 @@ impl WgpuContext {
             width,
             height,
             present_mode: wgpu::PresentMode::Fifo,
+            alpha_mode: wgpu::CompositeAlphaMode::Auto,
         };
         surface.configure(&device, &config);
 

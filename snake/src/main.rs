@@ -429,7 +429,7 @@ impl PlayingScene {
 
 impl Scene for PlayingScene {
     fn render(&mut self, graphics: &mut Graphics) {
-        self.terrain.render(graphics, &*self.sprites.borrow());
+        self.terrain.render(graphics, &self.sprites.borrow());
 
         self.snake.render(graphics);
         self.food.render(graphics);
@@ -503,7 +503,7 @@ impl LosingScene {
 
 impl Scene for LosingScene {
     fn render(&mut self, graphics: &mut Graphics) {
-        self.terrain.render(graphics, &*self.sprites.borrow());
+        self.terrain.render(graphics, &self.sprites.borrow());
         self.snake.render(graphics);
         graphics.draw_rect(
             Rect {

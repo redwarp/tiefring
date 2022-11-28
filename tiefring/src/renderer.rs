@@ -179,7 +179,7 @@ impl Renderer {
     ) -> Self {
         let shader = device_and_queue
             .device
-            .create_shader_module(&wgpu::ShaderModuleDescriptor {
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("Shader"),
                 source: wgpu::ShaderSource::Wgsl(include_str!("shaders/render.wgsl").into()),
             });
@@ -210,11 +210,11 @@ impl Renderer {
                     fragment: Some(wgpu::FragmentState {
                         module: &shader,
                         entry_point: "fs_main",
-                        targets: &[wgpu::ColorTargetState {
+                        targets: &[Some(wgpu::ColorTargetState {
                             format: wgpu::TextureFormat::Bgra8Unorm,
                             blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                             write_mask: wgpu::ColorWrites::ALL,
-                        }],
+                        })],
                     }),
                     primitive: wgpu::PrimitiveState {
                         topology: wgpu::PrimitiveTopology::TriangleList,

@@ -31,7 +31,7 @@ impl Body {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum BodyType {
     Hero,
     Orc,

@@ -17,14 +17,14 @@ use crate::map::Map;
 use crate::spawner;
 use crate::{inputs::Input, systems};
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum RunState {
     Init,
     WaitingForInput,
     AiTurn,
 }
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub enum Update {
     Refresh,
     Exit,

@@ -35,7 +35,7 @@ impl Tile {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum TileType {
     Wall,
     Floor,
@@ -354,11 +354,7 @@ impl MapRepresentation {
                     1
                 } else {
                     let index = index_with_width(width, x, y);
-                    if tiles[index].tile_type == TileType::Wall {
-                        1
-                    } else {
-                        0
-                    }
+                    u32::from(tiles[index].tile_type == TileType::Wall)
                 }
             })
             .collect();
