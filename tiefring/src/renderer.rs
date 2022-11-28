@@ -1,4 +1,4 @@
-use std::f32::consts::PI;
+use std::f32::consts::TAU;
 
 use glam::{Mat4, Vec3};
 use wgpu::{
@@ -296,7 +296,7 @@ pub struct RenderOperation {
 
 impl RenderOperation {
     pub fn rotate(&mut self, angle: f32) -> &mut Self {
-        let angle = angle.rem_euclid(2.0 * PI);
+        let angle = angle.rem_euclid(TAU);
         let x = self.position.scale.x / 2.0;
         let y = self.position.scale.y / 2.0;
         let rotation_matrix = RenderOperation::centered_rotation_matrix(x, y, angle);

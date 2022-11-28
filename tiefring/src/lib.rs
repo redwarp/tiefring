@@ -531,17 +531,16 @@ impl Graphics {
     }
 
     fn prepare_current_block(&mut self) {
-        if let Some(draw_data) =
-            self.current_operation_block
-                .take()
-                .into_iter()
-                .find_map(|operation_block| {
-                    self.render_preper.prepare(
-                        &mut self.buffer_cache,
-                        &self.device_and_queue,
-                        operation_block,
-                    )
-                })
+        if let Some(draw_data) = self
+            .current_operation_block
+            .take()
+            .and_then(|operation_block| {
+                self.render_preper.prepare(
+                    &mut self.buffer_cache,
+                    &self.device_and_queue,
+                    operation_block,
+                )
+            })
         {
             self.draw_datas.push(draw_data);
         }
