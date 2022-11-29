@@ -26,7 +26,7 @@ pub enum Error {
     RenderingFailed(wgpu::SurfaceError),
 }
 
-pub struct TiefringRenderer {
+pub struct GraphicsRenderer {
     draw_datas: Vec<DrawData>,
     renderer: Renderer,
     buffer_cache: BufferCache,
@@ -34,9 +34,11 @@ pub struct TiefringRenderer {
     size: SizeInPx,
     white_texture: Rc<Texture>,
     texture_context: TextureContext,
+    text_converter: TextConverter,
+    render_preper: RenderPreper,
 }
 
-impl TiefringRenderer {
+impl GraphicsRenderer {
     fn new(device: &Device, queue: &Queue, width: u32, height: u32, scale: f32) -> Self {
         let draw_datas = vec![];
         let camera = Camera::new(
@@ -64,6 +66,8 @@ impl TiefringRenderer {
         ));
 
         let texture_context = TextureContext::new(device);
+        let text_converter = TextConverter::new();
+        let render_preper = RenderPreper::new();
 
         Self {
             draw_datas,
@@ -73,6 +77,8 @@ impl TiefringRenderer {
             size,
             white_texture,
             texture_context,
+            text_converter,
+            render_preper,
         }
     }
 
@@ -92,6 +98,8 @@ impl TiefringRenderer {
             queue,
             &self.texture_context,
             &mut self.buffer_cache,
+            &mut self.text_converter,
+            &mut self.render_preper,
         );
 
         prepare_function(&mut graphics);
@@ -137,7 +145,7 @@ impl TiefringRenderer {
 
 pub struct Canvas {
     wgpu_context: WgpuContext,
-    tiefring_renderer: TiefringRenderer,
+    graphics_renderer: GraphicsRenderer,
     canvas_settings: CanvasSettings,
 }
 
@@ -152,7 +160,7 @@ impl Canvas {
         W: HasRawWindowHandle + HasRawDisplayHandle,
     {
         let wgpu_context = WgpuContext::new(window, width, height).await?;
-        let tiefring_renderer = TiefringRenderer::new(
+        let tiefring_renderer = GraphicsRenderer::new(
             &wgpu_context.device,
             &wgpu_context.queue,
             width,
@@ -162,7 +170,7 @@ impl Canvas {
 
         Ok(Self {
             wgpu_context,
-            tiefring_renderer,
+            graphics_renderer: tiefring_renderer,
             canvas_settings,
         })
     }
@@ -171,7 +179,7 @@ impl Canvas {
     where
         F: FnOnce(&mut Graphics),
     {
-        self.tiefring_renderer.prepare(
+        self.graphics_renderer.prepare(
             &self.wgpu_context.device,
             &self.wgpu_context.queue,
             draw_function,
@@ -208,7 +216,7 @@ impl Canvas {
                 depth_stencil_attachment: None,
             });
 
-            self.tiefring_renderer.render(&mut render_pass);
+            self.graphics_renderer.render(&mut render_pass);
         }
 
         encoder.copy_texture_to_texture(
@@ -279,11 +287,11 @@ impl Canvas {
 
     pub fn set_size(&mut self, width: u32, height: u32) {
         self.wgpu_context.resize(width, height);
-        self.tiefring_renderer.set_size(width, height);
+        self.graphics_renderer.set_size(width, height);
     }
 
     pub fn size(&self) -> SizeInPx {
-        self.tiefring_renderer.size
+        self.graphics_renderer.size
     }
 
     pub fn scale(&self) -> f32 {
@@ -291,15 +299,15 @@ impl Canvas {
     }
 
     pub fn set_scale(&mut self, scale: f32) {
-        self.tiefring_renderer.set_scale(scale);
+        self.graphics_renderer.set_scale(scale);
     }
 
     pub fn translation(&self) -> Position {
-        self.tiefring_renderer.camera.camera_settings.translation
+        self.graphics_renderer.camera.camera_settings.translation
     }
 
     pub fn set_translation(&mut self, translation: Position) {
-        self.tiefring_renderer.set_translation(translation)
+        self.graphics_renderer.set_translation(translation)
     }
 
     pub async fn screenshot<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
@@ -379,10 +387,10 @@ pub struct Graphics<'a> {
     white_texture: Rc<Texture>,
     current_operation_block: Option<OperationBlock>,
     draw_datas: Vec<DrawData>,
-    render_preper: RenderPreper,
+    render_preper: &'a mut RenderPreper,
     buffer_cache: &'a mut BufferCache,
     texture_context: &'a TextureContext,
-    text_converter: TextConverter,
+    text_converter: &'a mut TextConverter,
 }
 
 impl<'a> Graphics<'a> {
@@ -393,6 +401,8 @@ impl<'a> Graphics<'a> {
         queue: &'a Queue,
         texture_context: &'a TextureContext,
         buffer_cache: &'a mut BufferCache,
+        text_converter: &'a mut TextConverter,
+        render_preper: &'a mut RenderPreper,
     ) -> Self {
         Graphics {
             current_operation_block: None,
@@ -403,8 +413,8 @@ impl<'a> Graphics<'a> {
             texture_context,
             device,
             queue,
-            text_converter: TextConverter::new(),
-            render_preper: RenderPreper::new(),
+            text_converter,
+            render_preper,
             buffer_cache,
         }
     }

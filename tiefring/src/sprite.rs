@@ -24,10 +24,10 @@ impl Sprite {
             &canvas.wgpu_context.device,
             &canvas.wgpu_context.queue,
             &canvas
-                .tiefring_renderer
+                .graphics_renderer
                 .texture_context
                 .texture_bind_group_layout,
-            &canvas.tiefring_renderer.texture_context.sampler,
+            &canvas.graphics_renderer.texture_context.sampler,
             &rgba,
             dimensions,
         ))
@@ -90,10 +90,10 @@ impl TileSet {
             &canvas.wgpu_context.device,
             &canvas.wgpu_context.queue,
             &canvas
-                .tiefring_renderer
+                .graphics_renderer
                 .texture_context
                 .texture_bind_group_layout,
-            &canvas.tiefring_renderer.texture_context.sampler,
+            &canvas.graphics_renderer.texture_context.sampler,
             &rgba,
             dimensions,
             tile_dimensions,
