@@ -25,6 +25,7 @@ pub struct Camera {
     pub(crate) camera_buffer: Buffer,
     pub(crate) camera_bind_group_layout: BindGroupLayout,
     pub(crate) camera_bind_group: BindGroup,
+    pub(crate) dirty: bool,
 }
 
 impl Camera {
@@ -67,26 +68,27 @@ impl Camera {
             camera_buffer,
             camera_bind_group_layout,
             camera_bind_group,
+            dirty: true,
         }
     }
 
-    pub(crate) fn set_scale(&mut self, queue: &wgpu::Queue, scale: f32) {
+    pub(crate) fn set_scale(&mut self, scale: f32) {
         self.camera_settings.scale = scale;
-        self.recalculate(queue);
+        self.dirty = true;
     }
 
-    pub(crate) fn set_size(&mut self, queue: &wgpu::Queue, width: u32, height: u32) {
+    pub(crate) fn set_size(&mut self, width: u32, height: u32) {
         self.camera_settings.width = width;
         self.camera_settings.height = height;
-        self.recalculate(queue);
+        self.dirty = true;
     }
 
-    pub(crate) fn set_translation(&mut self, queue: &wgpu::Queue, translation: Position) {
+    pub(crate) fn set_translation(&mut self, translation: Position) {
         self.camera_settings.translation = translation;
-        self.recalculate(queue);
+        self.dirty = true;
     }
 
-    fn recalculate(&mut self, queue: &wgpu::Queue) {
+    pub(crate) fn recalculate(&mut self, queue: &wgpu::Queue) {
         let camera_uniform = CameraUniform {
             matrix: Camera::matrix(&self.camera_settings),
         };
@@ -96,6 +98,7 @@ impl Camera {
             0,
             bytemuck::cast_slice(&[camera_uniform]),
         );
+        self.dirty = false;
     }
 
     fn matrix(camera_settings: &CameraSettings) -> [f32; 16] {

@@ -89,6 +89,9 @@ impl TiefringRenderer {
         F: FnOnce(&mut Graphics),
     {
         self.reset();
+        if self.camera.dirty {
+            self.camera.recalculate(queue);
+        }
 
         let mut graphics = Graphics::new(
             self.size,
@@ -117,9 +120,9 @@ impl TiefringRenderer {
         }
     }
 
-    pub fn set_size(&mut self, queue: &Queue, width: u32, height: u32) {
+    pub fn set_size(&mut self, width: u32, height: u32) {
         self.size = SizeInPx { width, height };
-        self.camera.set_size(queue, width, height)
+        self.camera.set_size(width, height)
     }
 
     fn reset(&mut self) {
@@ -165,13 +168,6 @@ impl Canvas {
     where
         F: FnOnce(&mut Graphics),
     {
-        let mut encoder: CommandEncoder =
-            self.wgpu_context
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Render Encoder"),
-                });
-
         self.tiefring_renderer.prepare(
             &self.wgpu_context.device,
             &self.wgpu_context.queue,
@@ -187,6 +183,13 @@ impl Canvas {
             .wgpu_context
             .buffer_texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+
+        let mut encoder: CommandEncoder =
+            self.wgpu_context
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Render Encoder"),
+                });
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -277,13 +280,12 @@ impl Canvas {
     }
 
     pub fn set_size(&mut self, width: u32, height: u32) {
-        self.tiefring_renderer
-            .set_size(&self.wgpu_context.queue, width, height);
         self.wgpu_context.resize(width, height);
+        self.tiefring_renderer.set_size(width, height);
     }
 
     pub fn size(&self) -> SizeInPx {
-        self.wgpu_context.size
+        self.tiefring_renderer.size
     }
 
     pub fn scale(&self) -> f32 {
@@ -293,9 +295,7 @@ impl Canvas {
     pub fn set_scale(&mut self, scale: f32) {
         self.tiefring_renderer.canvas_settings.scale = scale;
 
-        self.tiefring_renderer
-            .camera
-            .set_scale(&self.wgpu_context.queue, scale);
+        self.tiefring_renderer.camera.set_scale(scale);
     }
 
     pub fn translation(&self) -> Position {
@@ -303,9 +303,7 @@ impl Canvas {
     }
 
     pub fn set_translation(&mut self, translation: Position) {
-        self.tiefring_renderer
-            .camera
-            .set_translation(&self.wgpu_context.queue, translation)
+        self.tiefring_renderer.camera.set_translation(translation)
     }
 
     pub async fn screenshot<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
@@ -768,11 +766,12 @@ impl WgpuContext {
         self.size = SizeInPx { width, height };
         self.config.width = width;
         self.config.height = height;
+
         self.surface.configure(&self.device, &self.config);
         self.buffer_texture = self.device.create_texture(&wgpu::TextureDescriptor {
             size: wgpu::Extent3d {
-                width,
-                height,
+                width: self.size.width,
+                height: self.size.height,
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
