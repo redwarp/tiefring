@@ -3,7 +3,7 @@ use std::f32::consts::TAU;
 use glam::{Mat4, Vec3};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
-    Buffer, BufferUsages, RenderPass, RenderPipeline, VertexBufferLayout,
+    Buffer, BufferUsages, Device, Queue, RenderPass, RenderPipeline, VertexBufferLayout,
 };
 
 use crate::{
@@ -272,6 +272,91 @@ impl Renderer {
         }
     }
 
+    pub(crate) fn new2(device: &Device, texture_context: &TextureContext, camera: &Camera) -> Self {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/render.wgsl").into()),
+        });
+
+        let render_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Texture Render Pipeline Layout"),
+                bind_group_layouts: &[
+                    &camera.camera_bind_group_layout,
+                    &texture_context.texture_bind_group_layout,
+                ],
+                push_constant_ranges: &[],
+            });
+
+        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Texture Render Pipeline"),
+            layout: Some(&render_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: "vs_main",
+                buffers: &[Vertex::description(), Instance::description()],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: "fs_main",
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Bgra8Unorm,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview: None,
+        });
+
+        let vertices = [
+            Vertex {
+                position: [0.0, 0.0],
+            },
+            Vertex {
+                position: [0.0, 1.0],
+            },
+            Vertex {
+                position: [1.0, 1.0],
+            },
+            Vertex {
+                position: [1.0, 0.0],
+            },
+        ];
+        let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice(&vertices[..]),
+            usage: BufferUsages::VERTEX,
+        });
+
+        let indices: [u16; 6] = [0, 1, 2, 2, 3, 0];
+        let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice(&indices[..]),
+            usage: BufferUsages::INDEX,
+        });
+
+        Self {
+            render_pipeline,
+            vertex_buffer,
+            index_buffer,
+        }
+    }
+
     pub(crate) fn render<'a>(
         &'a self,
         render_pass: &mut RenderPass<'a>,
@@ -366,6 +451,42 @@ impl RenderPreper {
 
         let instance_buffer = buffer_cache.get_buffer(
             device_and_queue,
+            bytemuck::cast_slice(&self.instances[..]),
+            BufferUsages::VERTEX,
+        );
+
+        Some(DrawData {
+            instance_buffer,
+            count: count as u32,
+            texture: operation_block.texture,
+        })
+    }
+
+    pub fn prepare2(
+        &mut self,
+        buffer_cache: &mut crate::cache::BufferCache,
+        device: &Device,
+        queue: &Queue,
+        operation_block: OperationBlock,
+    ) -> Option<DrawData> {
+        let count = operation_block.operations.len();
+        if count == 0 {
+            return None;
+        }
+
+        self.instances.reset_with_capacity(count);
+        self.instances
+            .extend(operation_block.operations.iter().map(|operation| {
+                Instance::new(
+                    &operation.tex_coords,
+                    &operation.position,
+                    &operation.color_matrix,
+                )
+            }));
+
+        let instance_buffer = buffer_cache.get_buffer2(
+            device,
+            queue,
             bytemuck::cast_slice(&self.instances[..]),
             BufferUsages::VERTEX,
         );

@@ -42,6 +42,25 @@ impl BufferCache {
         }
     }
 
+    pub fn get_buffer2(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        content: &[u8],
+        usage: BufferUsages,
+    ) -> ReusableBuffer {
+        let capacity = (size_of::<u8>() * content.len()) as u64;
+
+        let buffer = self.buffer_with_capacity(capacity, usage);
+
+        if let Some(mut buffer) = buffer {
+            buffer.update(queue, content);
+            buffer
+        } else {
+            ReusableBuffer::new(device, content, usage | BufferUsages::COPY_DST)
+        }
+    }
+
     pub fn release_buffer(&mut self, buffer: ReusableBuffer) {
         if (buffer.usage & BufferUsages::COPY_DST).is_empty() {
             return;
