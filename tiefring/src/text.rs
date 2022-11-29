@@ -254,6 +254,7 @@ impl TextConverter {
 }
 
 impl TextConverter {
+    #[allow(clippy::too_many_arguments)]
     pub fn render_operation(
         &mut self,
         text: &str,

@@ -148,8 +148,8 @@ impl Canvas {
     {
         let wgpu_context = WgpuContext::new(window, width, height).await?;
         let tiefring_renderer = TiefringRenderer::new(
-            &wgpu_context.device_and_queue.device,
-            &wgpu_context.device_and_queue.queue,
+            &wgpu_context.device,
+            &wgpu_context.queue,
             width,
             height,
             canvas_settings,
@@ -165,17 +165,16 @@ impl Canvas {
     where
         F: FnOnce(&mut Graphics),
     {
-        let mut encoder: CommandEncoder = self
-            .wgpu_context
-            .device_and_queue
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
+        let mut encoder: CommandEncoder =
+            self.wgpu_context
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Render Encoder"),
+                });
 
         self.tiefring_renderer.prepare(
-            &self.wgpu_context.device_and_queue.device,
-            &self.wgpu_context.device_and_queue.queue,
+            &self.wgpu_context.device,
+            &self.wgpu_context.queue,
             draw_function,
         );
 
@@ -231,23 +230,19 @@ impl Canvas {
             },
         );
 
-        self.wgpu_context
-            .device_and_queue
-            .queue
-            .submit(Some(encoder.finish()));
+        self.wgpu_context.queue.submit(Some(encoder.finish()));
         surface_texture.present();
 
         Ok(())
     }
 
     pub fn redraw_last(&mut self) -> Result<(), Error> {
-        let mut encoder: CommandEncoder = self
-            .wgpu_context
-            .device_and_queue
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Redraw Encoder"),
-            });
+        let mut encoder: CommandEncoder =
+            self.wgpu_context
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Redraw Encoder"),
+                });
 
         let surface_texture = self
             .wgpu_context
@@ -275,10 +270,7 @@ impl Canvas {
             },
         );
 
-        self.wgpu_context
-            .device_and_queue
-            .queue
-            .submit(Some(encoder.finish()));
+        self.wgpu_context.queue.submit(Some(encoder.finish()));
         surface_texture.present();
 
         Ok(())
@@ -286,7 +278,7 @@ impl Canvas {
 
     pub fn set_size(&mut self, width: u32, height: u32) {
         self.tiefring_renderer
-            .set_size(&self.wgpu_context.device_and_queue.queue, width, height);
+            .set_size(&self.wgpu_context.queue, width, height);
         self.wgpu_context.resize(width, height);
     }
 
@@ -303,7 +295,7 @@ impl Canvas {
 
         self.tiefring_renderer
             .camera
-            .set_scale(&self.wgpu_context.device_and_queue.queue, scale);
+            .set_scale(&self.wgpu_context.queue, scale);
     }
 
     pub fn translation(&self) -> Position {
@@ -313,87 +305,29 @@ impl Canvas {
     pub fn set_translation(&mut self, translation: Position) {
         self.tiefring_renderer
             .camera
-            .set_translation(&self.wgpu_context.device_and_queue.queue, translation)
+            .set_translation(&self.wgpu_context.queue, translation)
     }
 
     pub async fn screenshot<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
-        let mut encoder: CommandEncoder = self
-            .wgpu_context
-            .device_and_queue
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Screenshot Encoder"),
-            });
-
-        let output_buffer_size = self.wgpu_context.size.width as u64
-            * self.wgpu_context.size.height as u64
-            * std::mem::size_of::<u32>() as u64;
-        let output_buffer_desc = wgpu::BufferDescriptor {
-            size: output_buffer_size,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            label: None,
-            mapped_at_creation: false,
-        };
-        let output_buffer = self
-            .wgpu_context
-            .device_and_queue
-            .device
-            .create_buffer(&output_buffer_desc);
-
-        let texture = &self.wgpu_context.buffer_texture;
-
         let SizeInPx { width, height } = self.wgpu_context.size;
-
-        let copy_size = wgpu::Extent3d {
+        let pixels = texture_to_cpu(
+            &self.wgpu_context.device,
+            &self.wgpu_context.queue,
             width,
             height,
-            depth_or_array_layers: 1,
-        };
+            &self.wgpu_context.buffer_texture,
+        )
+        .await;
 
-        encoder.copy_texture_to_buffer(
-            wgpu::ImageCopyTexture {
-                aspect: wgpu::TextureAspect::All,
-                texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-            },
-            wgpu::ImageCopyBuffer {
-                buffer: &output_buffer,
-                layout: wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: std::num::NonZeroU32::new(4 * width),
-                    rows_per_image: std::num::NonZeroU32::new(height),
-                },
-            },
-            copy_size,
-        );
-        self.wgpu_context
-            .device_and_queue
-            .queue
-            .submit(Some(encoder.finish()));
+        use image::{ImageBuffer, Rgba};
+        let mut buffer = ImageBuffer::<Rgba<u8>, _>::from_raw(width, height, pixels).unwrap();
 
-        {
-            let buffer_slice = output_buffer.slice(..);
-            buffer_slice.map_async(wgpu::MapMode::Read, |_v| {});
-            self.wgpu_context
-                .device_and_queue
-                .device
-                .poll(wgpu::Maintain::Wait);
-
-            let data = buffer_slice.get_mapped_range();
-
-            use image::{ImageBuffer, Rgba};
-            let mut buffer =
-                ImageBuffer::<Rgba<u8>, _>::from_raw(width, height, data.to_vec()).unwrap();
-
-            for px in buffer.pixels_mut() {
-                let cmp = px.0;
-                *px = Rgba([cmp[2], cmp[1], cmp[0], cmp[3]]);
-            }
-
-            buffer.save(path).unwrap();
+        for px in buffer.pixels_mut() {
+            let cmp = px.0;
+            *px = Rgba([cmp[2], cmp[1], cmp[0], cmp[3]]);
         }
-        output_buffer.unmap();
+
+        buffer.save(path).unwrap();
 
         Ok(())
     }
@@ -554,14 +488,14 @@ impl<'a> Graphics<'a> {
             color,
             position,
             &font_for_px,
-            &self.device,
-            &self.queue,
-            &self.texture_context,
+            self.device,
+            self.queue,
+            self.texture_context,
         );
 
         let texture = font_for_px
             .borrow_mut()
-            .get_or_create_texture(&self.device, &self.texture_context);
+            .get_or_create_texture(self.device, self.texture_context);
         self.get_operation_block(&texture)
             .operations
             .append(&mut operations);
@@ -598,8 +532,8 @@ impl<'a> Graphics<'a> {
             .and_then(|operation_block| {
                 self.render_preper.prepare(
                     &mut self.buffer_cache,
-                    &self.device,
-                    &self.queue,
+                    self.device,
+                    self.queue,
                     operation_block,
                 )
             })
@@ -757,15 +691,10 @@ impl Color {
 }
 
 #[derive(Debug)]
-pub(crate) struct DeviceAndQueue {
-    pub device: wgpu::Device,
-    pub queue: wgpu::Queue,
-}
-
-#[derive(Debug)]
 pub(crate) struct WgpuContext {
     surface: wgpu::Surface,
-    pub device_and_queue: Rc<DeviceAndQueue>,
+    device: Device,
+    queue: Queue,
     config: wgpu::SurfaceConfiguration,
     size: SizeInPx,
     buffer_texture: wgpu::Texture,
@@ -824,12 +753,12 @@ impl WgpuContext {
             usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT,
             label: None,
         });
-        let device_and_queue = Rc::new(DeviceAndQueue { device, queue });
 
         Ok(WgpuContext {
             surface,
             config,
-            device_and_queue,
+            device,
+            queue,
             size,
             buffer_texture,
         })
@@ -839,24 +768,20 @@ impl WgpuContext {
         self.size = SizeInPx { width, height };
         self.config.width = width;
         self.config.height = height;
-        self.surface
-            .configure(&self.device_and_queue.device, &self.config);
-        self.buffer_texture =
-            self.device_and_queue
-                .device
-                .create_texture(&wgpu::TextureDescriptor {
-                    size: wgpu::Extent3d {
-                        width,
-                        height,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Bgra8Unorm,
-                    usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT,
-                    label: None,
-                });
+        self.surface.configure(&self.device, &self.config);
+        self.buffer_texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Bgra8Unorm,
+            usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT,
+            label: None,
+        });
     }
 }
 
@@ -881,4 +806,74 @@ impl From<Rect> for RenderPosition {
             scale,
         }
     }
+}
+
+async fn texture_to_cpu(
+    device: &Device,
+    queue: &Queue,
+    width: u32,
+    height: u32,
+    texture: &wgpu::Texture,
+) -> Vec<u8> {
+    let mut encoder =
+        device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+    let texture_size = wgpu::Extent3d {
+        width,
+        height,
+        depth_or_array_layers: 1,
+    };
+
+    let padded_bytes_per_row = padded_bytes_per_row(width);
+    let unpadded_bytes_per_row = width as usize * 4;
+
+    let output_buffer_size =
+        padded_bytes_per_row as u64 * height as u64 * std::mem::size_of::<u8>() as u64;
+    let output_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: None,
+        size: output_buffer_size,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+
+    encoder.copy_texture_to_buffer(
+        wgpu::ImageCopyTexture {
+            aspect: wgpu::TextureAspect::All,
+            texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+        },
+        wgpu::ImageCopyBuffer {
+            buffer: &output_buffer,
+            layout: wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: std::num::NonZeroU32::new(padded_bytes_per_row as u32),
+                rows_per_image: std::num::NonZeroU32::new(height),
+            },
+        },
+        texture_size,
+    );
+    queue.submit(Some(encoder.finish()));
+
+    let buffer_slice = output_buffer.slice(..);
+    buffer_slice.map_async(wgpu::MapMode::Read, |_| {});
+
+    device.poll(wgpu::Maintain::Wait);
+
+    let padded_data = buffer_slice.get_mapped_range();
+
+    let mut pixels: Vec<u8> = vec![0; (width * height * 4) as usize];
+    for (padded, pixels) in padded_data
+        .chunks_exact(padded_bytes_per_row)
+        .zip(pixels.chunks_exact_mut((width * 4) as usize))
+    {
+        pixels.copy_from_slice(bytemuck::cast_slice(&padded[..unpadded_bytes_per_row]));
+    }
+
+    pixels
+}
+
+fn padded_bytes_per_row(width: u32) -> usize {
+    let bytes_per_row = width as usize * 4;
+    let padding = (256 - bytes_per_row % 256) % 256;
+    bytes_per_row + padding
 }

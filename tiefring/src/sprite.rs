@@ -12,7 +12,28 @@ pub struct Sprite {
 }
 
 impl Sprite {
-    pub fn load_data<S>(
+    pub fn load_image<P: AsRef<Path>>(canvas: &Canvas, path: P) -> Option<Self> {
+        let image = image::open(path).ok()?;
+
+        let rgba = image.to_rgba8();
+
+        use image::GenericImageView;
+        let dimensions = image.dimensions();
+
+        Some(Sprite::load_data(
+            &canvas.wgpu_context.device,
+            &canvas.wgpu_context.queue,
+            &canvas
+                .tiefring_renderer
+                .texture_context
+                .texture_bind_group_layout,
+            &canvas.tiefring_renderer.texture_context.sampler,
+            &rgba,
+            dimensions,
+        ))
+    }
+
+    fn load_data<S>(
         device: &Device,
         queue: &Queue,
         texture_bind_group_layout: &BindGroupLayout,
@@ -44,27 +65,6 @@ impl Sprite {
             texture,
         }
     }
-
-    pub fn load_image<P: AsRef<Path>>(canvas: &Canvas, path: P) -> Option<Self> {
-        let image = image::open(path).ok()?;
-
-        let rgba = image.to_rgba8();
-
-        use image::GenericImageView;
-        let dimensions = image.dimensions();
-
-        Some(Sprite::load_data(
-            &canvas.wgpu_context.device_and_queue.device,
-            &canvas.wgpu_context.device_and_queue.queue,
-            &canvas
-                .tiefring_renderer
-                .texture_context
-                .texture_bind_group_layout,
-            &canvas.tiefring_renderer.texture_context.sampler,
-            &rgba,
-            dimensions,
-        ))
-    }
 }
 
 pub struct TileSet {
@@ -74,7 +74,66 @@ pub struct TileSet {
 }
 
 impl TileSet {
-    pub fn load_data<S, TS>(
+    pub fn load_image<P, S>(canvas: &mut Canvas, path: P, tile_dimensions: S) -> Option<Self>
+    where
+        P: AsRef<Path>,
+        S: Into<SizeInPx> + Copy,
+    {
+        let image = image::open(path).ok()?;
+
+        let rgba = image.to_rgba8();
+
+        use image::GenericImageView;
+        let dimensions = image.dimensions();
+
+        Some(TileSet::load_data::<(u32, u32), S>(
+            &canvas.wgpu_context.device,
+            &canvas.wgpu_context.queue,
+            &canvas
+                .tiefring_renderer
+                .texture_context
+                .texture_bind_group_layout,
+            &canvas.tiefring_renderer.texture_context.sampler,
+            &rgba,
+            dimensions,
+            tile_dimensions,
+        ))
+    }
+
+    pub fn tile_count(&self) -> (u32, u32) {
+        (
+            self.dimensions.width / self.tile_dimensions.width,
+            self.dimensions.height / self.tile_dimensions.height,
+        )
+    }
+
+    pub fn sprite(&self, x: u32, y: u32) -> &Sprite {
+        let (width, height) = self.tile_count();
+        if x > width || y > height {
+            panic!("x should be between 0 and {}, currently {}. y should be between 0 and {}, currently {}.", width, x, height, y);
+        }
+
+        let index = (y * width + x) as usize;
+        self.sprites
+            .get(index)
+            .expect("We already checked for out of bounds before.")
+    }
+
+    pub fn sprite_with_index(&self, index: usize) -> &Sprite {
+        if index >= self.sprites.len() {
+            panic!(
+                "Index {} out of bounds, max index is {}",
+                index,
+                self.sprites.len()
+            );
+        }
+
+        self.sprites
+            .get(index)
+            .expect("We already checked for out of bounds before.")
+    }
+
+    fn load_data<S, TS>(
         device: &Device,
         queue: &Queue,
         texture_bind_group_layout: &BindGroupLayout,
@@ -125,65 +184,6 @@ impl TileSet {
             tile_dimensions,
             sprites,
         }
-    }
-
-    pub fn load_image<P, S>(canvas: &mut Canvas, path: P, tile_dimensions: S) -> Option<Self>
-    where
-        P: AsRef<Path>,
-        S: Into<SizeInPx> + Copy,
-    {
-        let image = image::open(path).ok()?;
-
-        let rgba = image.to_rgba8();
-
-        use image::GenericImageView;
-        let dimensions = image.dimensions();
-
-        Some(TileSet::load_data::<(u32, u32), S>(
-            &canvas.wgpu_context.device_and_queue.device,
-            &canvas.wgpu_context.device_and_queue.queue,
-            &canvas
-                .tiefring_renderer
-                .texture_context
-                .texture_bind_group_layout,
-            &canvas.tiefring_renderer.texture_context.sampler,
-            &rgba,
-            dimensions,
-            tile_dimensions,
-        ))
-    }
-
-    pub fn tile_count(&self) -> (u32, u32) {
-        (
-            self.dimensions.width / self.tile_dimensions.width,
-            self.dimensions.height / self.tile_dimensions.height,
-        )
-    }
-
-    pub fn sprite(&self, x: u32, y: u32) -> &Sprite {
-        let (width, height) = self.tile_count();
-        if x > width || y > height {
-            panic!("x should be between 0 and {}, currently {}. y should be between 0 and {}, currently {}.", width, x, height, y);
-        }
-
-        let index = (y * width + x) as usize;
-        self.sprites
-            .get(index)
-            .expect("We already checked for out of bounds before.")
-    }
-
-    pub fn sprite_with_index(&self, index: usize) -> &Sprite {
-        if index >= self.sprites.len() {
-            panic!(
-                "Index {} out of bounds, max index is {}",
-                index,
-                self.sprites.len()
-            );
-        }
-
-        self.sprites
-            .get(index)
-            .expect("We already checked for out of bounds before.")
     }
 }
 
