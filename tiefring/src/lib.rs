@@ -34,22 +34,15 @@ pub struct TiefringRenderer {
     size: SizeInPx,
     white_texture: Rc<Texture>,
     texture_context: TextureContext,
-    pub(crate) canvas_settings: CanvasSettings,
 }
 
 impl TiefringRenderer {
-    fn new(
-        device: &Device,
-        queue: &Queue,
-        width: u32,
-        height: u32,
-        canvas_settings: CanvasSettings,
-    ) -> Self {
+    fn new(device: &Device, queue: &Queue, width: u32, height: u32, scale: f32) -> Self {
         let draw_datas = vec![];
         let camera = Camera::new(
             device,
             CameraSettings {
-                scale: canvas_settings.scale,
+                scale,
                 translation: Position::new(0.0, 0.0),
                 width,
                 height,
@@ -80,7 +73,6 @@ impl TiefringRenderer {
             size,
             white_texture,
             texture_context,
-            canvas_settings,
         }
     }
 
@@ -125,6 +117,14 @@ impl TiefringRenderer {
         self.camera.set_size(width, height)
     }
 
+    pub fn set_scale(&mut self, scale: f32) {
+        self.camera.set_scale(scale);
+    }
+
+    pub fn set_translation(&mut self, translation: Position) {
+        self.camera.set_translation(translation);
+    }
+
     fn reset(&mut self) {
         // We cleanup buffers that were not reused previously.
         self.buffer_cache.clear();
@@ -137,6 +137,7 @@ impl TiefringRenderer {
 pub struct Canvas {
     wgpu_context: WgpuContext,
     tiefring_renderer: TiefringRenderer,
+    canvas_settings: CanvasSettings,
 }
 
 impl Canvas {
@@ -155,12 +156,13 @@ impl Canvas {
             &wgpu_context.queue,
             width,
             height,
-            canvas_settings,
+            canvas_settings.scale,
         );
 
         Ok(Self {
             wgpu_context,
             tiefring_renderer,
+            canvas_settings,
         })
     }
 
@@ -198,12 +200,7 @@ impl Canvas {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(
-                            self.tiefring_renderer
-                                .canvas_settings
-                                .background_color
-                                .into(),
-                        ),
+                        load: wgpu::LoadOp::Clear(self.canvas_settings.background_color.into()),
                         store: true,
                     },
                 })],
@@ -289,13 +286,11 @@ impl Canvas {
     }
 
     pub fn scale(&self) -> f32 {
-        self.tiefring_renderer.canvas_settings.scale
+        self.canvas_settings.scale
     }
 
     pub fn set_scale(&mut self, scale: f32) {
-        self.tiefring_renderer.canvas_settings.scale = scale;
-
-        self.tiefring_renderer.camera.set_scale(scale);
+        self.tiefring_renderer.set_scale(scale);
     }
 
     pub fn translation(&self) -> Position {
@@ -303,7 +298,7 @@ impl Canvas {
     }
 
     pub fn set_translation(&mut self, translation: Position) {
-        self.tiefring_renderer.camera.set_translation(translation)
+        self.tiefring_renderer.set_translation(translation)
     }
 
     pub async fn screenshot<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {

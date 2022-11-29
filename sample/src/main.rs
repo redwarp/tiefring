@@ -174,9 +174,9 @@ fn main() {
             if input.key_pressed(VirtualKeyCode::Escape) || input.quit() {
                 *control_flow = ControlFlow::Exit;
                 return;
-            } else if input.key_pressed(VirtualKeyCode::Plus) {
+            } else if input.key_pressed(VirtualKeyCode::NumpadAdd) {
                 increase_scale(&mut canvas);
-            } else if input.key_pressed(VirtualKeyCode::Minus) {
+            } else if input.key_pressed(VirtualKeyCode::NumpadSubtract) {
                 decrease_scale(&mut canvas);
             } else if input.key_pressed(VirtualKeyCode::Up) {
                 translate(0.0, -10.0, &mut translation);
