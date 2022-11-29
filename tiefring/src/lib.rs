@@ -91,6 +91,7 @@ impl TiefringRenderer {
             device,
             queue,
             &self.texture_context,
+            &mut self.buffer_cache,
         );
 
         prepare_function(&mut graphics);
@@ -379,7 +380,7 @@ pub struct Graphics<'a> {
     current_operation_block: Option<OperationBlock>,
     draw_datas: Vec<DrawData>,
     render_preper: RenderPreper,
-    buffer_cache: BufferCache,
+    buffer_cache: &'a mut BufferCache,
     texture_context: &'a TextureContext,
     text_converter: TextConverter,
 }
@@ -391,6 +392,7 @@ impl<'a> Graphics<'a> {
         device: &'a Device,
         queue: &'a Queue,
         texture_context: &'a TextureContext,
+        buffer_cache: &'a mut BufferCache,
     ) -> Self {
         Graphics {
             current_operation_block: None,
@@ -403,7 +405,7 @@ impl<'a> Graphics<'a> {
             queue,
             text_converter: TextConverter::new(),
             render_preper: RenderPreper::new(),
-            buffer_cache: BufferCache::new(),
+            buffer_cache,
         }
     }
 
@@ -524,7 +526,7 @@ impl<'a> Graphics<'a> {
             .take()
             .and_then(|operation_block| {
                 self.render_preper.prepare(
-                    &mut self.buffer_cache,
+                    self.buffer_cache,
                     self.device,
                     self.queue,
                     operation_block,
