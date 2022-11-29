@@ -1,7 +1,7 @@
 use glam::{Mat4, Vec3};
-use wgpu::{util::DeviceExt, BindGroup, BindGroupLayout, Buffer, Device, Queue};
+use wgpu::{util::DeviceExt, BindGroup, BindGroupLayout, Buffer, Device};
 
-use crate::{DeviceAndQueue, Position};
+use crate::Position;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -28,57 +28,7 @@ pub struct Camera {
 }
 
 impl Camera {
-    pub(crate) fn new(device_and_queue: &DeviceAndQueue, camera_settings: CameraSettings) -> Self {
-        let camera_uniform = CameraUniform {
-            matrix: Camera::matrix(&camera_settings),
-        };
-
-        let camera_buffer =
-            device_and_queue
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Projection matrix buffer"),
-                    contents: bytemuck::cast_slice(&[camera_uniform]),
-                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                });
-
-        let camera_bind_group_layout =
-            device_and_queue
-                .device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    entries: &[wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    }],
-                    label: Some("camera_bind_group_layout"),
-                });
-        let camera_bind_group =
-            device_and_queue
-                .device
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    layout: &camera_bind_group_layout,
-                    entries: &[wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: camera_buffer.as_entire_binding(),
-                    }],
-                    label: Some("camera_bind_group"),
-                });
-
-        Camera {
-            camera_settings,
-            camera_buffer,
-            camera_bind_group_layout,
-            camera_bind_group,
-        }
-    }
-
-    pub(crate) fn new2(device: &Device, camera_settings: CameraSettings) -> Self {
+    pub(crate) fn new(device: &Device, camera_settings: CameraSettings) -> Self {
         let camera_uniform = CameraUniform {
             matrix: Camera::matrix(&camera_settings),
         };

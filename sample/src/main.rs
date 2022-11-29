@@ -1,10 +1,9 @@
 use std::f32::consts::PI;
 
-use tiefring::Canvas2 as Canvas;
 use tiefring::{
     sprite::{Sprite, TileSet},
     text::Font,
-    CanvasSettings, Color, Position,
+    Canvas, CanvasSettings, Color, Position,
 };
 use winit::{
     dpi::LogicalSize,
@@ -54,11 +53,11 @@ fn main() {
         .for_folder("sample/sprites")
         .unwrap();
 
-    let alien_1 = Sprite::load_image2(&canvas, sprites.join("p1_jump.png")).unwrap();
-    let alien_2 = Sprite::load_image2(&canvas, sprites.join("p2_front.png")).unwrap();
-    let alien_3 = Sprite::load_image2(&canvas, sprites.join("p3_stand.png")).unwrap();
+    let alien_1 = Sprite::load_image(&canvas, sprites.join("p1_jump.png")).unwrap();
+    let alien_2 = Sprite::load_image(&canvas, sprites.join("p2_front.png")).unwrap();
+    let alien_3 = Sprite::load_image(&canvas, sprites.join("p3_stand.png")).unwrap();
     let tile_set =
-        TileSet::load_image2(&mut canvas, sprites.join("basictiles.png"), (16, 16)).unwrap();
+        TileSet::load_image(&mut canvas, sprites.join("basictiles.png"), (16, 16)).unwrap();
 
     let fonts = find_folder::Search::ParentsThenKids(3, 3)
         .for_folder("resources/fonts")

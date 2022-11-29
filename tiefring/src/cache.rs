@@ -2,8 +2,6 @@ use std::{collections::BTreeMap, mem::size_of};
 
 use wgpu::{util::DeviceExt, Buffer, BufferSlice, BufferUsages, Device, Queue};
 
-use crate::DeviceAndQueue;
-
 #[derive(Debug)]
 pub(crate) struct BufferCache {
     vertex_map: BTreeMap<u64, Vec<ReusableBuffer>>,
@@ -21,28 +19,6 @@ impl BufferCache {
     }
 
     pub fn get_buffer(
-        &mut self,
-        device_and_queue: &DeviceAndQueue,
-        content: &[u8],
-        usage: BufferUsages,
-    ) -> ReusableBuffer {
-        let capacity = (size_of::<u8>() * content.len()) as u64;
-
-        let buffer = self.buffer_with_capacity(capacity, usage);
-
-        if let Some(mut buffer) = buffer {
-            buffer.update(&device_and_queue.queue, content);
-            buffer
-        } else {
-            ReusableBuffer::new(
-                &device_and_queue.device,
-                content,
-                usage | BufferUsages::COPY_DST,
-            )
-        }
-    }
-
-    pub fn get_buffer2(
         &mut self,
         device: &Device,
         queue: &Queue,
