@@ -1,5 +1,6 @@
-use glam::{Mat4, Vec3};
 use std::f32::consts::TAU;
+
+use glam::{Mat4, Vec3};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     Buffer, BufferUsages, Device, Queue, RenderPass, RenderPipeline, VertexBufferLayout,

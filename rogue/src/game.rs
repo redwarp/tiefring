@@ -1,22 +1,23 @@
-use std::ops::{Deref, DerefMut};
-use std::time::{Duration, Instant};
+use std::{
+    ops::{Deref, DerefMut},
+    time::{Duration, Instant},
+};
 
-use bevy_ecs::prelude::*;
-use bevy_ecs::schedule::ShouldRun;
 use bevy_ecs::{
-    prelude::World,
-    schedule::{Schedule, SystemStage},
+    prelude::{World, *},
+    schedule::{Schedule, ShouldRun, SystemStage},
 };
 use log::{debug, info};
-use rand::prelude::StdRng;
-use rand::SeedableRng;
+use rand::{prelude::StdRng, SeedableRng};
 use torchbearer::path::PathMap;
 
-use crate::actions::{AttackAction, MoveAction};
-use crate::components::{Health, Monster, Player, Position};
-use crate::map::Map;
-use crate::spawner;
-use crate::{inputs::Input, systems};
+use crate::{
+    actions::{AttackAction, MoveAction},
+    components::{Health, Monster, Player, Position},
+    inputs::Input,
+    map::Map,
+    spawner, systems,
+};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Resource)]
 pub enum RunState {

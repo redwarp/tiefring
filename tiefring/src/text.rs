@@ -1,12 +1,12 @@
+use std::{cell::RefCell, collections::HashMap, fmt::Debug, fs, path::Path, rc::Rc};
+
 use fontdue::layout::{CoordinateSystem, Layout, TextStyle};
 use rect_packer::Packer;
-use std::{cell::RefCell, collections::HashMap, fmt::Debug, fs, path::Path, rc::Rc};
 use wgpu::{BindGroup, BindGroupLayout, Device, Queue, Sampler};
 
 use crate::{
     renderer::{ColorMatrix, RenderOperation},
-    sprite::Texture,
-    sprite::{TextureContext, TextureId, TEXTURE_INDEX},
+    sprite::{Texture, TextureContext, TextureId, TEXTURE_INDEX},
     Color, Position, Rect,
 };
 
