@@ -1,13 +1,13 @@
 use bevy_ecs::prelude::{Changed, Commands, Entity, Query, Res, ResMut, With};
 use log::info;
-use rand::{prelude::StdRng, Rng};
+use rand::Rng;
 use torchbearer::path::PathMap;
 
 use crate::{
     actions::{AttackAction, MoveAction},
     components::{Health, Monster, MoveClose, MoveRandom, Name, Player, Position, Solid, Vision},
     effects::HealthEffect,
-    game::PlayerData,
+    game::{PlayerData, Random},
     map::Map,
     spawner,
     utils::find_path,
@@ -15,7 +15,7 @@ use crate::{
 
 pub fn move_random(
     mut commands: Commands,
-    mut rng: ResMut<StdRng>,
+    mut rng: ResMut<Random>,
     mut query: Query<(Entity, &Position), With<MoveRandom>>,
 ) {
     query.for_each_mut(|(entity, position)| {
@@ -31,7 +31,7 @@ pub fn move_random(
         let y = position.y + dy;
 
         let move_action = MoveAction { entity, x, y };
-        commands.spawn().insert(move_action);
+        commands.spawn(move_action);
     });
 }
 
@@ -52,7 +52,7 @@ pub fn move_to_player(
                     let new_position = Position { x, y };
                     if player_data.position != new_position {
                         let move_action = MoveAction { entity, x, y };
-                        commands.spawn().insert(move_action);
+                        commands.spawn(move_action);
                     }
                 }
             }
@@ -90,7 +90,7 @@ pub fn attack_action(
 ) {
     attack_actions.for_each(|&AttackAction { entity: _, target }| {
         if health_stats.get(target).is_ok() {
-            commands.spawn().insert(HealthEffect {
+            commands.spawn(HealthEffect {
                 entity: target,
                 amount: -8,
             });

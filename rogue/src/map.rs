@@ -1,6 +1,6 @@
 use std::vec;
 
-use bevy_ecs::prelude::World;
+use bevy_ecs::{prelude::World, system::Resource};
 use rand::{prelude::StdRng, Rng, SeedableRng};
 use tiefring::Color;
 use torchbearer::{fov::VisionMap, path::PathMap};
@@ -41,6 +41,7 @@ pub enum TileType {
     Floor,
 }
 
+#[derive(Resource)]
 pub struct Map {
     pub width: i32,
     pub height: i32,

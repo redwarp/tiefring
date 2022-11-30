@@ -394,6 +394,7 @@ pub struct Graphics<'a> {
 }
 
 impl<'a> Graphics<'a> {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         size: SizeInPx,
         white_texture: Rc<Texture>,

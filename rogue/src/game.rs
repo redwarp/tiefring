@@ -1,3 +1,4 @@
+use std::ops::{Deref, DerefMut};
 use std::time::{Duration, Instant};
 
 use bevy_ecs::prelude::*;
@@ -17,7 +18,7 @@ use crate::map::Map;
 use crate::spawner;
 use crate::{inputs::Input, systems};
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Resource)]
 pub enum RunState {
     Init,
     WaitingForInput,
@@ -49,6 +50,30 @@ enum Stages {
 #[derive(Debug, Clone, Hash, PartialEq, Eq, SystemLabel)]
 enum Systems {
     FieldOfView,
+}
+
+#[derive(Resource)]
+pub struct Random(StdRng);
+
+impl Deref for Random {
+    type Target = StdRng;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Random {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl Random {
+    fn new() -> Self {
+        let rng = StdRng::from_entropy();
+        Self(rng)
+    }
 }
 
 fn ai_turn(run_state: Res<RunState>) -> ShouldRun {
@@ -111,8 +136,8 @@ impl Game {
 
         let starting_position = map.starting_position;
         world.insert_resource(map);
-        let rng = StdRng::from_entropy();
-        world.insert_resource(rng);
+        let random = Random::new();
+        world.insert_resource(random);
 
         let player = spawner::player(&mut world, starting_position.x, starting_position.y);
         let player_data = PlayerData {
@@ -212,7 +237,7 @@ impl Game {
 
         match attack_action {
             Some(attack_action) => {
-                self.world.spawn().insert(attack_action);
+                self.world.spawn(attack_action);
                 acted = true;
             }
             None => {
@@ -222,7 +247,7 @@ impl Game {
                     .unwrap()
                     .is_walkable((x, y))
                 {
-                    self.world.spawn().insert(MoveAction {
+                    self.world.spawn(MoveAction {
                         entity: player_entity,
                         x,
                         y,
@@ -236,6 +261,7 @@ impl Game {
     }
 }
 
+#[derive(Resource)]
 pub struct PlayerData {
     pub position: Position,
     pub entity: Entity,

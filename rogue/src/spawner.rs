@@ -6,49 +6,53 @@ use crate::components::{
 
 pub fn player(world: &mut World, x: i32, y: i32) -> Entity {
     world
-        .spawn()
-        .insert(Player)
-        .insert(Position::new(x, y))
-        .insert(Body::new(BodyType::Hero))
-        .insert(Vision::new(8))
-        .insert(Health::full_health(32))
-        .insert(Solid)
-        .insert(Name("Player".to_string()))
+        .spawn((
+            Player,
+            Position::new(x, y),
+            Body::new(BodyType::Hero),
+            Vision::new(8),
+            Health::full_health(32),
+            Solid,
+            Name("Player".to_string()),
+        ))
         .id()
 }
 
 pub fn orc(world: &mut World, name: &str, x: i32, y: i32) -> Entity {
     world
-        .spawn()
-        .insert(Monster)
-        .insert(Position::new(x, y))
-        .insert(Body::new(BodyType::Orc))
-        .insert(Solid)
-        .insert(MoveClose)
-        .insert(Vision::new(8))
-        .insert(Health::full_health(12))
-        .insert(Name(format!("Orc number {}", name)))
+        .spawn((
+            Monster,
+            Position::new(x, y),
+            Body::new(BodyType::Orc),
+            Solid,
+            MoveClose,
+            Vision::new(8),
+            Health::full_health(12),
+            Name(format!("Orc number {}", name)),
+        ))
         .id()
 }
 
 pub fn deer(world: &mut World, x: i32, y: i32) -> Entity {
     world
-        .spawn()
-        .insert(Monster)
-        .insert(Position::new(x, y))
-        .insert(Body::new(BodyType::Deer))
-        .insert(Solid)
-        .insert(MoveRandom)
-        .insert(Health::full_health(8))
-        .insert(Name("A deer".to_string()))
+        .spawn((
+            Monster,
+            Position::new(x, y),
+            Body::new(BodyType::Deer),
+            Solid,
+            MoveRandom,
+            Health::full_health(8),
+            Name("A deer".to_string()),
+        ))
         .id()
 }
 
 pub fn spawn_body(commands: &mut Commands, x: i32, y: i32, name: &str) -> Entity {
     commands
-        .spawn()
-        .insert(Position::new(x, y))
-        .insert(Body::new(BodyType::BonePile))
-        .insert(Name(format!("Body of {}", name)))
+        .spawn((
+            Position::new(x, y),
+            Body::new(BodyType::BonePile),
+            Name(format!("Body of {}", name)),
+        ))
         .id()
 }
