@@ -554,26 +554,17 @@ impl<'a> Graphics<'a> {
 pub struct Rect {
     pub left: f32,
     pub top: f32,
-    pub right: f32,
-    pub bottom: f32,
+    pub width: f32,
+    pub height: f32,
 }
 
 impl Rect {
-    pub fn new(left: f32, top: f32, right: f32, bottom: f32) -> Self {
-        Self {
-            left,
-            top,
-            right,
-            bottom,
-        }
-    }
-
-    pub fn from_xywh(x: f32, y: f32, width: f32, height: f32) -> Self {
+    pub fn new(x: f32, y: f32, width: f32, height: f32) -> Self {
         Self {
             left: x,
             top: y,
-            right: x + width,
-            bottom: y + height,
+            width,
+            height,
         }
     }
 
@@ -581,25 +572,17 @@ impl Rect {
         Self {
             left: x,
             top: y,
-            right: x + width,
-            bottom: y + width,
+            width,
+            height: width,
         }
-    }
-
-    pub fn width(&self) -> f32 {
-        self.right - self.left
-    }
-
-    pub fn height(&self) -> f32 {
-        self.bottom - self.top
     }
 
     pub fn translated(&self, x: f32, y: f32) -> Self {
         Self {
             left: self.left + x,
             top: self.top + y,
-            right: self.right + x,
-            bottom: self.bottom + y,
+            width: self.width,
+            height: self.height,
         }
     }
 }
@@ -609,33 +592,20 @@ impl From<[i32; 4]> for Rect {
         Rect {
             left: coordinates[0] as f32,
             top: coordinates[1] as f32,
-            right: coordinates[2] as f32,
-            bottom: coordinates[3] as f32,
+            width: coordinates[2] as f32,
+            height: coordinates[3] as f32,
         }
     }
 }
 
 impl From<(Position, SizeInPx)> for Rect {
     fn from((position, size): (Position, SizeInPx)) -> Self {
-        Rect::from_xywh(
+        Rect::new(
             position.x,
             position.y,
             size.width as f32,
             size.height as f32,
         )
-    }
-}
-
-impl std::ops::Mul<f32> for &Rect {
-    type Output = Rect;
-
-    fn mul(self, rhs: f32) -> Self::Output {
-        Rect {
-            left: self.left * rhs,
-            top: self.top * rhs,
-            right: self.right * rhs,
-            bottom: self.bottom * rhs,
-        }
     }
 }
 
@@ -819,7 +789,7 @@ impl RenderPosition {
 impl From<Rect> for RenderPosition {
     fn from(rect: Rect) -> Self {
         let transformation = Mat4::from_translation(Vec3::new(rect.left, rect.top, 0.0));
-        let scale = Position::new(rect.width(), rect.height());
+        let scale = Position::new(rect.width, rect.height);
         Self {
             transformation,
             scale,

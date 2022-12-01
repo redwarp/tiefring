@@ -58,8 +58,8 @@ impl Sprite {
         let tex_coord = Rect {
             left: 0.0,
             top: 0.0,
-            right: 1.0,
-            bottom: 1.0,
+            width: 1.0,
+            height: 1.0,
         };
 
         Sprite {
@@ -173,8 +173,8 @@ impl TileSet {
                 let tex_coords = Rect {
                     left: (x * tile_dimensions.width) as f32 / dimensions.width as f32,
                     top: (y * tile_dimensions.height) as f32 / dimensions.height as f32,
-                    right: ((x + 1) * tile_dimensions.width) as f32 / dimensions.width as f32,
-                    bottom: ((y + 1) * tile_dimensions.height) as f32 / dimensions.height as f32,
+                    width: tile_dimensions.width as f32 / dimensions.width as f32,
+                    height: tile_dimensions.height as f32 / dimensions.height as f32,
                 };
 
                 let sprite = Sprite {

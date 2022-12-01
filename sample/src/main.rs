@@ -102,7 +102,7 @@ fn main() {
                         graphics.draw_sprite(&alien_2, Position { x: 77.0, y: 100.0 });
                         graphics.draw_sprite(&alien_3, Position { x: 144.0, y: 100.0 });
                         graphics.draw_rect(
-                            [0, 160, 240, 360],
+                            [0, 160, 240, 200],
                             Color {
                                 r: 0.1,
                                 g: 0.2,
@@ -111,7 +111,7 @@ fn main() {
                             },
                         );
                         graphics
-                            .draw_sprite_in_rect(&alien_1, [211, 100, 345, 288])
+                            .draw_sprite_in_rect(&alien_1, [211, 100, 134, 188])
                             .rotate(angle)
                             .translate(100.0, 0.0);
                         graphics.draw_sprite(&alien_1, Position { x: 150.0, y: 200.0 });

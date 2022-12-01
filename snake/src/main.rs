@@ -514,8 +514,8 @@ impl Scene for LosingScene {
             Rect {
                 left: 0.0,
                 top: 0.0,
-                right: self.terrain.size.0 as f32 * GRID_STEP,
-                bottom: self.terrain.size.1 as f32 * GRID_STEP,
+                width: self.terrain.size.0 as f32 * GRID_STEP,
+                height: self.terrain.size.1 as f32 * GRID_STEP,
             },
             Color {
                 r: 0.0,

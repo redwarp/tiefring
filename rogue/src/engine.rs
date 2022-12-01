@@ -176,7 +176,7 @@ impl Renderer {
                         for i in x_range.clone() {
                             let tile_index = map.tile_index_at_position(i, j).unwrap();
                             if map.is_revealed(i as i32, j as i32) {
-                                let rect = Rect::from_xywh(
+                                let rect = Rect::new(
                                     i as f32 * TILE_SIZE,
                                     j as f32 * TILE_SIZE,
                                     TILE_SIZE,
@@ -194,7 +194,7 @@ impl Renderer {
                     for j in y_range.clone() {
                         for i in x_range.clone() {
                             if map.is_revealed(i as i32, j as i32) {
-                                let rect = Rect::from_xywh(
+                                let rect = Rect::new(
                                     i as f32 * TILE_SIZE,
                                     j as f32 * TILE_SIZE,
                                     TILE_SIZE,
@@ -369,11 +369,11 @@ impl StatBar {
         let origin_x = origin.x as f32 * TILE_SIZE + 10.0;
         let origin_y = origin.y as f32 * TILE_SIZE + 10.0;
         let ratio = self.current as f32 / self.max as f32;
-        let rect = Rect::from_xywh(origin_x, origin_y, WIDTH * ratio, HEIGHT);
+        let rect = Rect::new(origin_x, origin_y, WIDTH * ratio, HEIGHT);
 
         graphics.draw_rect(rect, self.color);
 
-        let rect = Rect::from_xywh(
+        let rect = Rect::new(
             origin_x + WIDTH * ratio,
             origin_y,
             WIDTH * (1.0 - ratio),

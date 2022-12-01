@@ -91,9 +91,9 @@ pub struct Instance {
 impl Instance {
     fn new(tex_coords: &Rect, position: &RenderPosition, color_matrix: &ColorMatrix) -> Self {
         let tex_coords = [
-            tex_coords.right - tex_coords.left,
+            tex_coords.width,
             tex_coords.left,
-            tex_coords.bottom - tex_coords.top,
+            tex_coords.height,
             tex_coords.top,
         ];
 

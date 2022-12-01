@@ -132,8 +132,8 @@ impl SizedFont {
                 tex_coords: Rect {
                     left: 0.0,
                     top: 0.0,
-                    right: 0.0,
-                    bottom: 0.0,
+                    width: 0.0,
+                    height: 0.0,
                 },
             };
 
@@ -181,10 +181,10 @@ impl SizedFont {
             );
 
             let tex_coords = Rect {
-                left: packed.left() as f32 / 1024.0,
-                top: packed.top() as f32 / 1024.0,
-                right: packed.right() as f32 / 1024.0,
-                bottom: packed.bottom() as f32 / 1024.0,
+                left: packed.x as f32 / 1024.0,
+                top: packed.y as f32 / 1024.0,
+                width: packed.width as f32 / 1024.0,
+                height: packed.height as f32 / 1024.0,
             };
 
             let character = CharacterReference { tex_coords };
@@ -294,8 +294,7 @@ impl TextConverter {
             .glyphs()
             .iter()
             .filter_map(|glyph| {
-                let position =
-                    Rect::from_xywh(glyph.x, glyph.y, glyph.width as f32, glyph.height as f32);
+                let position = Rect::new(glyph.x, glyph.y, glyph.width as f32, glyph.height as f32);
 
                 font_for_px
                     .get_or_create_character(glyph.parent, device, queue, texture_context)
