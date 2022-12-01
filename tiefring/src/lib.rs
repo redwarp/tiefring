@@ -1,4 +1,7 @@
-use std::{path::Path, rc::Rc};
+use std::{
+    path::{Path, PathBuf},
+    rc::Rc,
+};
 
 use glam::{Mat4, Vec3};
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
@@ -12,6 +15,7 @@ use crate::{
     sprite::{Sprite, Texture, TextureContext},
     text::{Font, TextConverter},
 };
+
 mod cache;
 mod camera;
 mod renderer;
@@ -25,6 +29,9 @@ pub enum Error {
 
     #[error("Rendering failed")]
     RenderingFailed(wgpu::SurfaceError),
+
+    #[error("Loading failed")]
+    LoadingFailed(PathBuf),
 }
 
 pub struct GraphicsRenderer {
@@ -33,7 +40,6 @@ pub struct GraphicsRenderer {
     buffer_cache: BufferCache,
     camera: Camera,
     size: SizeInPx,
-    white_texture: Rc<Texture>,
     texture_context: TextureContext,
     text_converter: TextConverter,
     render_preper: RenderPreper,
@@ -52,21 +58,12 @@ impl GraphicsRenderer {
             },
         );
 
-        let texture_context = Rc::new(TextureContext::new(device));
+        let texture_context = TextureContext::new(device, queue);
 
         let renderer = Renderer::new(device, &texture_context, &camera);
         let buffer_cache = BufferCache::new();
         let size = SizeInPx { width, height };
-        let white_texture = Rc::new(Texture::new(
-            device,
-            queue,
-            &texture_context.texture_bind_group_layout,
-            &texture_context.sampler,
-            &[255, 255, 255, 255],
-            SizeInPx::new(1, 1),
-        ));
 
-        let texture_context = TextureContext::new(device);
         let text_converter = TextConverter::new();
         let render_preper = RenderPreper::new();
 
@@ -76,7 +73,6 @@ impl GraphicsRenderer {
             buffer_cache,
             camera,
             size,
-            white_texture,
             texture_context,
             text_converter,
             render_preper,
@@ -94,7 +90,6 @@ impl GraphicsRenderer {
 
         let mut graphics = Graphics::new(
             self.size,
-            self.white_texture.clone(),
             device,
             queue,
             &self.texture_context,
@@ -385,7 +380,6 @@ pub struct Graphics<'a> {
     queue: &'a Queue,
     size: SizeInPx,
     translation: Option<Position>,
-    white_texture: Rc<Texture>,
     current_operation_block: Option<OperationBlock>,
     draw_datas: Vec<DrawData>,
     render_preper: &'a mut RenderPreper,
@@ -395,10 +389,8 @@ pub struct Graphics<'a> {
 }
 
 impl<'a> Graphics<'a> {
-    #[allow(clippy::too_many_arguments)]
     fn new(
         size: SizeInPx,
-        white_texture: Rc<Texture>,
         device: &'a Device,
         queue: &'a Queue,
         texture_context: &'a TextureContext,
@@ -411,7 +403,6 @@ impl<'a> Graphics<'a> {
             draw_datas: vec![],
             size,
             translation: None,
-            white_texture,
             texture_context,
             device,
             queue,
@@ -437,7 +428,7 @@ impl<'a> Graphics<'a> {
             tex_coords,
         };
 
-        self.get_operation_block(&self.white_texture.clone())
+        self.get_operation_block(self.texture_context.white_texture.clone())
             .push_render_operation(operation)
     }
 
@@ -470,7 +461,7 @@ impl<'a> Graphics<'a> {
             color_matrix,
             tex_coords,
         };
-        self.get_operation_block(&sprite.texture)
+        self.get_operation_block(sprite.texture.clone())
             .push_render_operation(operation)
     }
 
@@ -503,7 +494,7 @@ impl<'a> Graphics<'a> {
         let texture = font_for_px
             .borrow_mut()
             .get_or_create_texture(self.device, self.texture_context);
-        self.get_operation_block(&texture)
+        self.get_operation_block(texture)
             .operations
             .append(&mut operations);
     }
@@ -521,12 +512,12 @@ impl<'a> Graphics<'a> {
         self.size
     }
 
-    fn get_operation_block(&mut self, texture: &Rc<Texture>) -> &mut OperationBlock {
+    fn get_operation_block(&mut self, texture: Rc<Texture>) -> &mut OperationBlock {
         let need_new = !matches!(&self.current_operation_block, Some(operation_block) if operation_block.texture.id == texture.id);
         if need_new {
             self.prepare_current_block();
 
-            self.current_operation_block = Some(OperationBlock::with_texture(texture.clone()));
+            self.current_operation_block = Some(OperationBlock::with_texture(texture));
         }
 
         self.current_operation_block.as_mut().unwrap()

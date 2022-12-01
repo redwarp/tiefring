@@ -271,10 +271,11 @@ impl Texture {
 pub(crate) struct TextureContext {
     pub texture_bind_group_layout: BindGroupLayout,
     pub sampler: Sampler,
+    pub white_texture: Rc<Texture>,
 }
 
 impl TextureContext {
-    pub fn new(device: &Device) -> Self {
+    pub fn new(device: &Device, queue: &Queue) -> Self {
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[
@@ -308,9 +309,19 @@ impl TextureContext {
             ..Default::default()
         });
 
+        let white_texture = Rc::new(Texture::new(
+            device,
+            queue,
+            &texture_bind_group_layout,
+            &sampler,
+            &[255, 255, 255, 255],
+            SizeInPx::new(1, 1),
+        ));
+
         Self {
             texture_bind_group_layout,
             sampler,
+            white_texture,
         }
     }
 }
