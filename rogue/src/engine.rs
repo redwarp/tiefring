@@ -3,6 +3,7 @@ use std::{cell::RefCell, cmp::Ordering, rc::Rc};
 use anyhow::Result;
 use bevy_ecs::prelude::{Entity, Mut, World};
 use tiefring::{
+    resources::Resources,
     sprite::{Sprite, TileSet},
     text::Font,
     Canvas, CanvasSettings, Color, Graphics, Rect, SizeInPx,
@@ -125,13 +126,16 @@ struct Renderer {
 
 impl Renderer {
     fn new(canvas: &mut Canvas) -> Self {
-        let sprites = Sprites::new(canvas);
+        let resources = canvas.resources();
+        let sprites = Sprites::new(&resources);
         let fonts = find_folder::Search::ParentsThenKids(3, 3)
             .for_folder("resources/fonts")
             .unwrap();
         let hud = {
             let font = Rc::new(RefCell::new(
-                Font::load_font(fonts.join("VT323-Regular.ttf")).unwrap(),
+                resources
+                    .load_font(fonts.join("VT323-Regular.ttf"))
+                    .unwrap(),
             ));
 
             Hud::new(font)
@@ -280,13 +284,17 @@ struct Sprites {
 }
 
 impl Sprites {
-    fn new(canvas: &mut Canvas) -> Self {
+    fn new(resources: &Resources) -> Self {
         let sprites = find_folder::Search::ParentsThenKids(3, 3)
             .for_folder("rogue/sprites")
             .unwrap();
 
-        let tiles = TileSet::load_image(canvas, sprites.join("tiles.png"), (32, 32)).unwrap();
-        let people = TileSet::load_image(canvas, sprites.join("chars.png"), (32, 32)).unwrap();
+        let tiles = resources
+            .load_tileset(sprites.join("tiles.png"), (32, 32))
+            .unwrap();
+        let people = resources
+            .load_tileset(sprites.join("chars.png"), (32, 32))
+            .unwrap();
         Self { tiles, people }
     }
 

@@ -7,7 +7,7 @@ use wgpu::{BindGroup, BindGroupLayout, Device, Queue, Sampler};
 use crate::{
     renderer::{ColorMatrix, RenderOperation},
     sprite::{Texture, TextureContext, TextureId, TEXTURE_INDEX},
-    Color, Position, Rect,
+    Color, Error, Position, Rect,
 };
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, Debug)]
@@ -21,14 +21,16 @@ pub struct Font {
 static CACHE_WIDTH: u32 = 1024;
 
 impl Font {
-    pub fn load_font<P: AsRef<Path>>(path: P) -> Option<Self> {
-        let bytes = fs::read(path).ok()?;
+    pub(crate) fn load_font<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
+        let bytes = fs::read(&path).map_err(|_e| Error::LoadingFailed(path.as_ref().into()))?;
 
-        let font =
-            Rc::new(fontdue::Font::from_bytes(bytes, fontdue::FontSettings::default()).ok()?);
+        let font = Rc::new(
+            fontdue::Font::from_bytes(bytes, fontdue::FontSettings::default())
+                .map_err(|_e| Error::LoadingFailed(path.as_ref().into()))?,
+        );
         let font_cache = HashMap::new();
 
-        Some(Self { font, font_cache })
+        Ok(Self { font, font_cache })
     }
 
     pub fn measure(&self, character: char, px: u32) -> (f32, f32) {

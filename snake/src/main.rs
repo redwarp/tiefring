@@ -304,13 +304,15 @@ impl Sprites {
 
         Self {
             start: resources.load_sprite(sprites.join("start.png")).unwrap(),
-            grass: TileSet::load_image(
-                canvas,
-                sprites.join("grass.png"),
-                SizeInPx::new(GRID_STEP as u32, GRID_STEP as u32),
-            )
-            .unwrap(),
-            font: Font::load_font(fonts.join("VT323-Regular.ttf")).unwrap(),
+            grass: resources
+                .load_tileset(
+                    sprites.join("grass.png"),
+                    SizeInPx::new(GRID_STEP as u32, GRID_STEP as u32),
+                )
+                .unwrap(),
+            font: resources
+                .load_font(fonts.join("VT323-Regular.ttf"))
+                .unwrap(),
         }
     }
 }

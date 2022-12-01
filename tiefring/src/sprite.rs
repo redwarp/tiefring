@@ -2,7 +2,7 @@ use std::{path::Path, rc::Rc, sync::atomic::AtomicUsize};
 
 use wgpu::{BindGroup, BindGroupLayout, Device, Queue, Sampler, SamplerBindingType};
 
-use crate::{Canvas, Error, Rect, SizeInPx};
+use crate::{Error, Rect, SizeInPx};
 
 #[derive(Clone)]
 pub struct Sprite {
@@ -77,26 +77,30 @@ pub struct TileSet {
 }
 
 impl TileSet {
-    pub fn load_image<P, S>(canvas: &mut Canvas, path: P, tile_dimensions: S) -> Option<Self>
+    pub fn load_image<P, S>(
+        device: &Device,
+        queue: &Queue,
+        texture_bind_group_layout: &BindGroupLayout,
+        sampler: &Sampler,
+        path: P,
+        tile_dimensions: S,
+    ) -> Result<Self, Error>
     where
         P: AsRef<Path>,
         S: Into<SizeInPx> + Copy,
     {
-        let image = image::open(path).ok()?;
+        let image = image::open(&path).map_err(|_e| Error::LoadingFailed(path.as_ref().into()))?;
 
         let rgba = image.to_rgba8();
 
         use image::GenericImageView;
         let dimensions = image.dimensions();
 
-        Some(TileSet::load_data::<(u32, u32), S>(
-            &canvas.wgpu_context.device,
-            &canvas.wgpu_context.queue,
-            &canvas
-                .graphics_renderer
-                .texture_context
-                .texture_bind_group_layout,
-            &canvas.graphics_renderer.texture_context.sampler,
+        Ok(TileSet::load_data::<(u32, u32), S>(
+            device,
+            queue,
+            texture_bind_group_layout,
+            sampler,
             &rgba,
             dimensions,
             tile_dimensions,

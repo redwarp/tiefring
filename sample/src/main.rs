@@ -1,6 +1,6 @@
 use std::f32::consts::PI;
 
-use tiefring::{sprite::TileSet, text::Font, Canvas, CanvasSettings, Color, Position};
+use tiefring::{Canvas, CanvasSettings, Color, Position};
 use winit::{
     dpi::LogicalSize,
     event::{Event, VirtualKeyCode},
@@ -54,15 +54,20 @@ fn main() {
     let alien_1 = resources.load_sprite(sprites.join("p1_jump.png")).unwrap();
     let alien_2 = resources.load_sprite(sprites.join("p2_front.png")).unwrap();
     let alien_3 = resources.load_sprite(sprites.join("p3_stand.png")).unwrap();
-    let tile_set =
-        TileSet::load_image(&mut canvas, sprites.join("basictiles.png"), (16, 16)).unwrap();
+    let tile_set = resources
+        .load_tileset(sprites.join("basictiles.png"), (16, 16))
+        .unwrap();
 
     let fonts = find_folder::Search::ParentsThenKids(3, 3)
         .for_folder("resources/fonts")
         .unwrap();
 
-    let mut roboto_regular = Font::load_font(fonts.join("Roboto-Regular.ttf")).unwrap();
-    let mut vt323_regular = Font::load_font(fonts.join("VT323-Regular.ttf")).unwrap();
+    let mut roboto_regular = resources
+        .load_font(fonts.join("Roboto-Regular.ttf"))
+        .unwrap();
+    let mut vt323_regular = resources
+        .load_font(fonts.join("VT323-Regular.ttf"))
+        .unwrap();
 
     window.set_visible(true);
     let mut translation = Position::new(0.0, 0.0);
