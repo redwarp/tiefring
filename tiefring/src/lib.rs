@@ -448,13 +448,7 @@ impl<'a> Graphics<'a> {
     }
 
     pub fn draw_sprite(&mut self, sprite: &Sprite, position: Position) -> &mut RenderOperation {
-        let destination = Rect {
-            left: position.x,
-            top: position.y,
-            right: position.x + sprite.dimensions.width as f32,
-            bottom: position.y + sprite.dimensions.height as f32,
-        };
-        self.draw_sprite_in_rect(sprite, destination)
+        self.draw_sprite_in_rect(sprite, (position, sprite.dimensions))
     }
 
     pub fn draw_sprite_in_rect<R: Into<Rect>>(
@@ -618,6 +612,17 @@ impl From<[i32; 4]> for Rect {
             right: coordinates[2] as f32,
             bottom: coordinates[3] as f32,
         }
+    }
+}
+
+impl From<(Position, SizeInPx)> for Rect {
+    fn from((position, size): (Position, SizeInPx)) -> Self {
+        Rect::from_xywh(
+            position.x,
+            position.y,
+            size.width as f32,
+            size.height as f32,
+        )
     }
 }
 
