@@ -2,7 +2,7 @@ use std::{path::Path, rc::Rc, sync::atomic::AtomicUsize};
 
 use wgpu::{BindGroup, BindGroupLayout, Device, Queue, Sampler, SamplerBindingType};
 
-use crate::{Canvas, Rect, SizeInPx};
+use crate::{Canvas, Error, Rect, SizeInPx};
 
 #[derive(Clone)]
 pub struct Sprite {
@@ -12,22 +12,25 @@ pub struct Sprite {
 }
 
 impl Sprite {
-    pub fn load_image<P: AsRef<Path>>(canvas: &Canvas, path: P) -> Option<Self> {
-        let image = image::open(path).ok()?;
+    pub(crate) fn load_image<P: AsRef<Path>>(
+        device: &Device,
+        queue: &Queue,
+        texture_bind_group_layout: &BindGroupLayout,
+        sampler: &Sampler,
+        path: P,
+    ) -> Result<Self, Error> {
+        let image = image::open(&path).map_err(|_e| Error::LoadingFailed(path.as_ref().into()))?;
 
         let rgba = image.to_rgba8();
 
         use image::GenericImageView;
         let dimensions = image.dimensions();
 
-        Some(Sprite::load_data(
-            &canvas.wgpu_context.device,
-            &canvas.wgpu_context.queue,
-            &canvas
-                .graphics_renderer
-                .texture_context
-                .texture_bind_group_layout,
-            &canvas.graphics_renderer.texture_context.sampler,
+        Ok(Sprite::load_data(
+            device,
+            queue,
+            texture_bind_group_layout,
+            sampler,
             &rgba,
             dimensions,
         ))

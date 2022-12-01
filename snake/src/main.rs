@@ -299,8 +299,11 @@ impl Sprites {
         let fonts = find_folder::Search::ParentsThenKids(3, 3)
             .for_folder("resources/fonts")
             .unwrap();
+
+        let resources = canvas.resources();
+
         Self {
-            start: Sprite::load_image(canvas, sprites.join("start.png")).unwrap(),
+            start: resources.load_sprite(sprites.join("start.png")).unwrap(),
             grass: TileSet::load_image(
                 canvas,
                 sprites.join("grass.png"),

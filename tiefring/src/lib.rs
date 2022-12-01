@@ -5,6 +5,7 @@ use std::{
 
 use glam::{Mat4, Vec3};
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
+use resources::Resources;
 use thiserror::Error;
 use wgpu::{CommandEncoder, Device, Queue, RenderPass};
 
@@ -19,6 +20,7 @@ use crate::{
 mod cache;
 mod camera;
 mod renderer;
+pub mod resources;
 pub mod sprite;
 pub mod text;
 
@@ -128,6 +130,10 @@ impl GraphicsRenderer {
 
     pub fn set_translation(&mut self, translation: Position) {
         self.camera.set_translation(translation);
+    }
+
+    pub fn resources<'a>(&'a self, device: &'a Device, queue: &'a Queue) -> Resources<'a> {
+        Resources::new(device, queue, &self.texture_context)
     }
 
     fn reset(&mut self) {
@@ -295,6 +301,7 @@ impl Canvas {
     }
 
     pub fn set_scale(&mut self, scale: f32) {
+        self.canvas_settings.scale = scale;
         self.graphics_renderer.set_scale(scale);
     }
 
@@ -328,6 +335,14 @@ impl Canvas {
         buffer.save(path).unwrap();
 
         Ok(())
+    }
+
+    pub fn resources(&self) -> Resources {
+        Resources::new(
+            &self.wgpu_context.device,
+            &self.wgpu_context.queue,
+            &self.graphics_renderer.texture_context,
+        )
     }
 }
 
