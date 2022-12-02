@@ -1,5 +1,6 @@
 use std::f32::consts::PI;
 
+use fps_counter::FPSCounter;
 use tiefring::{Canvas, CanvasSettings, Color, Position};
 use winit::{
     dpi::LogicalSize,
@@ -74,11 +75,12 @@ fn main() {
     window.set_visible(true);
     let mut translation = Position::new(0.0, 0.0);
     let mut angle = PI / 4.0;
+    let mut fps_counter = FPSCounter::new();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
 
-        if let Event::RedrawRequested(_) = event {
+        if let Event::MainEventsCleared = event {
             canvas
                 .draw(|graphics| {
                     graphics.with_translation(translation, |graphics| {
@@ -112,6 +114,7 @@ fn main() {
                                 a: 1.0,
                             },
                         );
+
                         graphics
                             .draw_sprite_in_rect(&alien_1, [211, 100, 134, 188])
                             .rotate(angle)
@@ -173,6 +176,14 @@ fn main() {
                         graphics
                             .draw_sprite(&rocket, Position::new(300.0, 150.0))
                             .rotate(-0.25);
+
+                        graphics.draw_text(
+                            &mut vt323_regular,
+                            format!("FPS: {}", fps_counter.tick()),
+                            20,
+                            Position::new(10.0, 400.0),
+                            Color::rgb(1.0, 1.0, 1.0),
+                        );
                     });
                 })
                 .unwrap();

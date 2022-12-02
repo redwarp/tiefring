@@ -72,7 +72,7 @@ impl Engine {
         event_loop.run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Poll;
 
-            if let Event::RedrawRequested(_) = event {
+            if let Event::MainEventsCleared = event {
                 if redraw {
                     renderer.update(&mut game);
                     canvas

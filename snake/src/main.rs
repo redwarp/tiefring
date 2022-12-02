@@ -661,7 +661,7 @@ fn main() {
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
 
-        if let Event::RedrawRequested(_) = event {
+        if let Event::MainEventsCleared = event {
             canvas
                 .draw(|graphics| {
                     game.render(graphics);
