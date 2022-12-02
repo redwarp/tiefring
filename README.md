@@ -30,3 +30,4 @@ Ortho camera: https://www.reddit.com/r/opengl/comments/fmmtcs/pixel_perfect_wind
 
 * https://opengameart.org/content/platformer-art-deluxe
 * https://opengameart.org/content/tiny-16-basic
+* https://freesvg.org/blue-rocket-taking-off-vector-drawing
