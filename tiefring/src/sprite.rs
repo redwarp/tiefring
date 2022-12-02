@@ -36,7 +36,7 @@ impl Sprite {
         ))
     }
 
-    fn load_data<S>(
+    pub(crate) fn load_data<S>(
         device: &Device,
         queue: &Queue,
         texture_bind_group_layout: &BindGroupLayout,

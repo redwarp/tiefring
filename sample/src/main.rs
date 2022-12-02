@@ -54,6 +54,8 @@ fn main() {
     let alien_1 = resources.load_sprite(sprites.join("p1_jump.png")).unwrap();
     let alien_2 = resources.load_sprite(sprites.join("p2_front.png")).unwrap();
     let alien_3 = resources.load_sprite(sprites.join("p3_stand.png")).unwrap();
+    let rocket = resources.load_svg(sprites.join("rocket.svg")).unwrap();
+
     let tile_set = resources
         .load_tileset(sprites.join("basictiles.png"), (16, 16))
         .unwrap();
@@ -167,7 +169,10 @@ fn main() {
                                 b: 2.0,
                                 a: 0.75,
                             },
-                        )
+                        );
+                        graphics
+                            .draw_sprite(&rocket, Position::new(300.0, 150.0))
+                            .rotate(-0.25);
                     });
                 })
                 .unwrap();

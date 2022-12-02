@@ -34,6 +34,15 @@ pub enum Error {
 
     #[error("Loading failed")]
     LoadingFailed(PathBuf),
+
+    #[error("Loading failed")]
+    IOError(std::io::Error),
+}
+
+impl From<std::io::Error> for Error {
+    fn from(error: std::io::Error) -> Self {
+        Self::IOError(error)
+    }
 }
 
 pub struct GraphicsRenderer {

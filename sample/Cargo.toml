@@ -5,7 +5,7 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-tiefring = { path = "../tiefring" }
+tiefring = { path = "../tiefring", features = ["svg"] }
 winit = "0.27"
 winit_input_helper = "0.13"
 pollster = "0.2"
