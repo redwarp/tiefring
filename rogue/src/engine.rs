@@ -159,8 +159,8 @@ impl Renderer {
 
         graphics.with_translation(
             tiefring::Position {
-                x: translate_x,
-                y: translate_y,
+                left: translate_x,
+                top: translate_y,
             },
             |graphics| {
                 game.world.resource_scope(|world, map: Mut<Map>| {

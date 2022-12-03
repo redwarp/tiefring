@@ -265,8 +265,8 @@ impl Terrain {
                 graphics.draw_sprite(
                     unsafe { grasses.get_unchecked(*self.tiles.get_unchecked(sprite_index)) },
                     tiefring::Position {
-                        y: j as f32 * GRID_STEP,
-                        x: i as f32 * GRID_STEP,
+                        top: j as f32 * GRID_STEP,
+                        left: i as f32 * GRID_STEP,
                     },
                 );
             }
@@ -344,10 +344,10 @@ impl Scene for StartingScene {
         let sprite_height = self.sprites.borrow().start.dimensions.height as f32;
         self.terrain.render(graphics, &self.sprites.borrow());
         let position = tiefring::Position {
-            x: (self.size.0 as f32 * GRID_STEP
+            left: (self.size.0 as f32 * GRID_STEP
                 - self.sprites.borrow().start.dimensions.width as f32)
                 / 2.0,
-            y: (self.size.1 as f32 * GRID_STEP - sprite_height) / 2.0,
+            top: (self.size.1 as f32 * GRID_STEP - sprite_height) / 2.0,
         };
         graphics.draw_sprite(&self.sprites.borrow().start, position);
         graphics.draw_text(
@@ -526,8 +526,8 @@ impl Scene for LosingScene {
         );
 
         let position = tiefring::Position {
-            x: (self.terrain.size.0 / 3) as f32 * GRID_STEP,
-            y: (self.terrain.size.1 / 3) as f32 * GRID_STEP,
+            left: (self.terrain.size.0 / 3) as f32 * GRID_STEP,
+            top: (self.terrain.size.1 / 3) as f32 * GRID_STEP,
         };
         graphics.draw_text(
             &mut self.sprites.borrow_mut().font,

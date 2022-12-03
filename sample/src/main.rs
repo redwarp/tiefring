@@ -109,9 +109,9 @@ fn main() {
                                 a: 0.5,
                             },
                         );
-                        graphics.draw_sprite(&alien_1, Position { x: 10.0, y: 100.0 });
-                        graphics.draw_sprite(&alien_2, Position { x: 77.0, y: 100.0 });
-                        graphics.draw_sprite(&alien_3, Position { x: 144.0, y: 100.0 });
+                        graphics.draw_sprite(&alien_1, Position::new(10.0, 100.0));
+                        graphics.draw_sprite(&alien_2, Position::new(77.0, 100.0));
+                        graphics.draw_sprite(&alien_3, Position::new(144.0, 100.0));
                         graphics.draw_rect(
                             [0, 160, 240, 200],
                             Color {
@@ -126,7 +126,7 @@ fn main() {
                             .draw_sprite_in_rect(&alien_1, [211, 100, 134, 188])
                             .rotate(angle)
                             .translate(100.0, 0.0);
-                        graphics.draw_sprite(&alien_1, Position { x: 150.0, y: 200.0 });
+                        graphics.draw_sprite(&alien_1, Position::new(150.0, 200.0));
 
                         let (x, y) = tile_set.tile_count();
                         for i in 0..x {
@@ -135,14 +135,20 @@ fn main() {
                                 graphics.draw_sprite(
                                     sprite,
                                     Position {
-                                        x: i as f32 * 16.0 + 300.0,
-                                        y: j as f32 * 16.0,
+                                        left: i as f32 * 16.0 + 300.0,
+                                        top: j as f32 * 16.0,
                                     },
                                 );
                             }
                         }
 
-                        graphics.draw_sprite(&alien_1, Position { x: 350.0, y: 0.0 });
+                        graphics.draw_sprite(
+                            &alien_1,
+                            Position {
+                                left: 350.0,
+                                top: 0.0,
+                            },
+                        );
 
                         graphics.draw_text(
                             &mut roboto_regular,
@@ -252,6 +258,6 @@ fn decrease_scale(canvas: &mut Canvas) {
 }
 
 fn translate(dx: f32, dy: f32, translation: &mut Position) {
-    translation.x = (translation.x + dx).max(0.0);
-    translation.y = (translation.y + dy).max(0.0);
+    translation.left = (translation.left + dx).max(0.0);
+    translation.top = (translation.top + dy).max(0.0);
 }

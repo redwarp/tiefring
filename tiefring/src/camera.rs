@@ -113,6 +113,6 @@ impl Camera {
 
     fn view_matrix(scale: f32, translate: Position) -> Mat4 {
         Mat4::from_scale(Vec3::new(scale, scale, 1.0))
-            * Mat4::from_translation(Vec3::new(translate.x, translate.y, 0.0))
+            * Mat4::from_translation(Vec3::new(translate.left, translate.top, 0.0))
     }
 }

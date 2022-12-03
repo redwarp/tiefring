@@ -276,7 +276,7 @@ impl TextConverter {
         let size = font_for_px.borrow().px;
         let fonts = &[font_for_px.borrow().font.clone()];
 
-        let Position { x, y } = position;
+        let Position { left: x, top: y } = position;
         self.layout.reset(&fontdue::layout::LayoutSettings {
             x,
             y,

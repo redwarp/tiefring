@@ -210,7 +210,7 @@ fn main() {
                         for (position, particle_lifetime) in query.iter(&world) {
                             count += 1;
                             graphics
-                                .draw_sprite(&star, tiefring::Position::new(position.x, position.y))
+                                .draw_sprite(&star, (position.x, position.y))
                                 .alpha(particle_lifetime.freshness())
                                 .rotate(TAU * particle_lifetime.freshness());
                         }
@@ -224,7 +224,7 @@ fn main() {
                         graphics.draw_text(
                             &mut roboto_regular,
                             &text,
-                            30,
+                            20,
                             tiefring::Position::new(0.0, 0.0),
                             Color::rgb(1.0, 1.0, 1.0),
                         );

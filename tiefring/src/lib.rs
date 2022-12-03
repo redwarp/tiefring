@@ -443,7 +443,7 @@ impl<'a> Graphics<'a> {
         let tex_coords = Rect::new(0.0, 0.0, 1.0, 1.0);
 
         let rect: Rect = if let Some(translation) = self.translation {
-            rect.into().translated(translation.x, translation.y)
+            rect.into().translated(translation.left, translation.top)
         } else {
             rect.into()
         };
@@ -459,8 +459,12 @@ impl<'a> Graphics<'a> {
             .push_render_operation(operation)
     }
 
-    pub fn draw_sprite(&mut self, sprite: &Sprite, position: Position) -> &mut RenderOperation {
-        self.draw_sprite_in_rect(sprite, (position, sprite.dimensions))
+    pub fn draw_sprite<P: Into<Position>>(
+        &mut self,
+        sprite: &Sprite,
+        position: P,
+    ) -> &mut RenderOperation {
+        self.draw_sprite_in_rect(sprite, (position.into(), sprite.dimensions))
     }
 
     pub fn draw_sprite_in_rect<R: Into<Rect>>(
@@ -470,7 +474,7 @@ impl<'a> Graphics<'a> {
     ) -> &mut RenderOperation {
         let tex_coords = sprite.tex_coords;
         let rect: Rect = if let Some(translation) = self.translation {
-            rect.into().translated(translation.x, translation.y)
+            rect.into().translated(translation.left, translation.top)
         } else {
             rect.into()
         };
@@ -486,20 +490,17 @@ impl<'a> Graphics<'a> {
             .push_render_operation(operation)
     }
 
-    pub fn draw_text<T>(
-        &mut self,
-        font: &mut Font,
-        text: T,
-        px: u32,
-        position: Position,
-        color: Color,
-    ) where
+    pub fn draw_text<T, P>(&mut self, font: &mut Font, text: T, px: u32, position: P, color: Color)
+    where
         T: AsRef<str>,
+        P: Into<Position>,
     {
         let position = if let Some(translation) = self.translation {
-            position.translated(translation.x, translation.y)
-        } else {
             position
+                .into()
+                .translated(translation.left, translation.top)
+        } else {
+            position.into()
         };
         let font_for_px = font.get_font_for_px(px);
         let mut operations = self.text_converter.render_operation(
@@ -611,11 +612,22 @@ impl From<[i32; 4]> for Rect {
     }
 }
 
+impl From<[f32; 4]> for Rect {
+    fn from(coordinates: [f32; 4]) -> Self {
+        Rect {
+            left: coordinates[0],
+            top: coordinates[1],
+            width: coordinates[2],
+            height: coordinates[3],
+        }
+    }
+}
+
 impl From<(Position, SizeInPx)> for Rect {
     fn from((position, size): (Position, SizeInPx)) -> Self {
         Rect::new(
-            position.x,
-            position.y,
+            position.left,
+            position.top,
             size.width as f32,
             size.height as f32,
         )
@@ -624,20 +636,26 @@ impl From<(Position, SizeInPx)> for Rect {
 
 #[derive(Clone, Copy, Debug)]
 pub struct Position {
-    pub x: f32,
-    pub y: f32,
+    pub left: f32,
+    pub top: f32,
 }
 
 impl Position {
     pub fn new(left: f32, top: f32) -> Self {
-        Self { x: left, y: top }
+        Self { left, top }
     }
 
     pub fn translated(&self, x: f32, y: f32) -> Self {
         Self {
-            x: self.x + x,
-            y: self.y + y,
+            left: self.left + x,
+            top: self.top + y,
         }
+    }
+}
+
+impl From<(f32, f32)> for Position {
+    fn from((left, top): (f32, f32)) -> Self {
+        Self { left, top }
     }
 }
 
@@ -794,7 +812,7 @@ pub(crate) struct RenderPosition {
 
 impl RenderPosition {
     pub fn matrix(&self) -> Mat4 {
-        let scale = Mat4::from_scale(Vec3::new(self.scale.x, self.scale.y, 1.0));
+        let scale = Mat4::from_scale(Vec3::new(self.scale.left, self.scale.top, 1.0));
         self.transformation * scale
     }
 
@@ -808,8 +826,8 @@ impl RenderPosition {
 
     pub fn rotate(&mut self, angle: f32) -> &mut Self {
         let angle = angle.rem_euclid(std::f32::consts::TAU);
-        let x = self.scale.x / 2.0;
-        let y = self.scale.y / 2.0;
+        let x = self.scale.left / 2.0;
+        let y = self.scale.top / 2.0;
         let rotation_matrix = Self::centered_rotation_matrix(x, y, angle);
 
         self.transformation *= rotation_matrix;
@@ -841,8 +859,8 @@ impl From<Rect> for RenderPosition {
     fn from(rect: Rect) -> Self {
         let transformation = Mat4::from_translation(Vec3::new(rect.left, rect.top, 0.0));
         let scale = Position {
-            x: rect.width,
-            y: rect.height,
+            left: rect.width,
+            top: rect.height,
         };
         Self {
             transformation,
