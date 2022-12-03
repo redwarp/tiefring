@@ -1,6 +1,4 @@
-use std::f32::consts::TAU;
-
-use glam::{Mat4, Vec3};
+use glam::Mat4;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     Buffer, BufferUsages, Device, Queue, RenderPass, RenderPipeline, VertexBufferLayout,
@@ -104,7 +102,7 @@ impl Instance {
         }
     }
 
-    fn description<'a>() -> VertexBufferLayout<'a> {
+    const fn description<'a>() -> VertexBufferLayout<'a> {
         use std::mem;
         VertexBufferLayout {
             array_stride: mem::size_of::<Instance>() as wgpu::BufferAddress,
@@ -281,19 +279,13 @@ pub struct RenderOperation {
 
 impl RenderOperation {
     pub fn rotate(&mut self, angle: f32) -> &mut Self {
-        let angle = angle.rem_euclid(TAU);
-        let x = self.position.scale.x / 2.0;
-        let y = self.position.scale.y / 2.0;
-        let rotation_matrix = RenderOperation::centered_rotation_matrix(x, y, angle);
+        self.position.rotate(angle);
 
-        self.position.transformation *= rotation_matrix;
         self
     }
 
     pub fn translate(&mut self, x: f32, y: f32) -> &mut Self {
-        let translation_matrix = Mat4::from_translation(Vec3::new(x, y, 0.0));
-
-        self.position.transformation *= translation_matrix;
+        self.position.translate(x, y);
 
         self
     }
@@ -302,26 +294,6 @@ impl RenderOperation {
         self.color_matrix.matrix[3][3] *= alpha;
 
         self
-    }
-
-    /// Calculate a rotation matrix centered at the x and y passed.
-    /// Using this https://www.brainvoyager.com/bv/doc/UsersGuide/CoordsAndTransforms/SpatialTransformationMatrices.html
-    /// for the base matrices, and using wolfgram alpha to reduce the operations of translate, rotate, translate back to one single matrix.
-    fn centered_rotation_matrix(x: f32, y: f32, angle: f32) -> Mat4 {
-        let cos = angle.cos();
-        let sin = angle.sin();
-        let cols = [
-            [cos, sin, 0.0, 0.0],
-            [-sin, cos, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
-            [
-                x * (-cos) + y * sin + x,
-                -x * sin + y * (-cos) + y,
-                0.0,
-                1.0,
-            ],
-        ];
-        Mat4::from_cols_array_2d(&cols)
     }
 }
 
