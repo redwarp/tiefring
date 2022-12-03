@@ -89,7 +89,7 @@ pub struct Instance {
 }
 
 impl Instance {
-    fn new(tex_coords: &Rect, position: &RenderPosition, color_matrix: &ColorMatrix) -> Self {
+    fn new(tex_coords: Rect, position: RenderPosition, color_matrix: ColorMatrix) -> Self {
         let tex_coords = [
             tex_coords.width,
             tex_coords.left,
@@ -100,7 +100,7 @@ impl Instance {
         Self {
             tex_coords,
             position_matrix: PositionMatrix::from_mat4(&position.matrix()),
-            color_matrix: *color_matrix,
+            color_matrix,
         }
     }
 
@@ -342,11 +342,11 @@ impl RenderPreper {
 
         self.instances.clear();
         self.instances
-            .extend(operation_block.operations.iter().map(|operation| {
+            .extend(operation_block.operations.into_iter().map(|operation| {
                 Instance::new(
-                    &operation.tex_coords,
-                    &operation.position,
-                    &operation.color_matrix,
+                    operation.tex_coords,
+                    operation.position,
+                    operation.color_matrix,
                 )
             }));
 

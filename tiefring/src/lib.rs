@@ -59,7 +59,7 @@ pub struct GraphicsRenderer {
 }
 
 impl GraphicsRenderer {
-    fn new(device: &Device, queue: &Queue, width: u32, height: u32, scale: f32) -> Self {
+    pub fn new(device: &Device, queue: &Queue, width: u32, height: u32, scale: f32) -> Self {
         let draw_datas = vec![];
         let camera = Camera::new(
             device,
@@ -173,7 +173,7 @@ impl Canvas {
         W: HasRawWindowHandle + HasRawDisplayHandle,
     {
         let wgpu_context = WgpuContext::new(window, width, height).await?;
-        let tiefring_renderer = GraphicsRenderer::new(
+        let graphics_renderer = GraphicsRenderer::new(
             &wgpu_context.device,
             &wgpu_context.queue,
             width,
@@ -183,7 +183,7 @@ impl Canvas {
 
         Ok(Self {
             wgpu_context,
-            graphics_renderer: tiefring_renderer,
+            graphics_renderer,
             canvas_settings,
         })
     }
