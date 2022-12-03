@@ -106,6 +106,7 @@ impl GraphicsRenderer {
             device,
             queue,
             &self.texture_context,
+            &mut self.draw_datas,
             &mut self.buffer_cache,
             &mut self.text_converter,
             &mut self.render_preper,
@@ -113,8 +114,6 @@ impl GraphicsRenderer {
 
         prepare_function(&mut graphics);
         graphics.prepare_current_block();
-
-        self.draw_datas = graphics.draw_datas;
     }
 
     pub fn render<'rpass>(&'rpass mut self, render_pass: &mut RenderPass<'rpass>) {
@@ -407,7 +406,7 @@ pub struct Graphics<'a> {
     size: SizeInPx,
     translation: Option<Position>,
     current_operation_block: Option<OperationBlock>,
-    draw_datas: Vec<DrawData>,
+    draw_datas: &'a mut Vec<DrawData>,
     render_preper: &'a mut RenderPreper,
     buffer_cache: &'a mut BufferCache,
     texture_context: &'a TextureContext,
@@ -415,18 +414,20 @@ pub struct Graphics<'a> {
 }
 
 impl<'a> Graphics<'a> {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         size: SizeInPx,
         device: &'a Device,
         queue: &'a Queue,
         texture_context: &'a TextureContext,
+        draw_datas: &'a mut Vec<DrawData>,
         buffer_cache: &'a mut BufferCache,
         text_converter: &'a mut TextConverter,
         render_preper: &'a mut RenderPreper,
     ) -> Self {
         Graphics {
             current_operation_block: None,
-            draw_datas: vec![],
+            draw_datas,
             size,
             translation: None,
             texture_context,
@@ -533,7 +534,7 @@ impl<'a> Graphics<'a> {
     }
 
     fn get_operation_block(&mut self, texture: &Rc<Texture>) -> &mut OperationBlock {
-        let need_new = !matches!(&self.current_operation_block, Some(operation_block) if operation_block.texture.id == texture.id && operation_block.operations.len() < 2048);
+        let need_new = !matches!(&self.current_operation_block, Some(operation_block) if operation_block.texture.id == texture.id && operation_block.operations.len() < 4096);
         if need_new {
             self.prepare_current_block();
 
@@ -571,7 +572,7 @@ pub struct Rect {
 }
 
 impl Rect {
-    pub fn new(x: f32, y: f32, width: f32, height: f32) -> Self {
+    pub const fn new(x: f32, y: f32, width: f32, height: f32) -> Self {
         Self {
             left: x,
             top: y,
@@ -580,7 +581,7 @@ impl Rect {
         }
     }
 
-    pub fn square(x: f32, y: f32, width: f32) -> Self {
+    pub const fn square(x: f32, y: f32, width: f32) -> Self {
         Self {
             left: x,
             top: y,
