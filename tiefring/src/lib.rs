@@ -24,6 +24,8 @@ pub mod resources;
 pub mod sprite;
 pub mod text;
 
+const DEFAULT_COLOR_MATRIX: ColorMatrix = ColorMatrix::from_color(Color::rgb(1.0, 1.0, 1.0));
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Couldn't initialize wgpu")]
@@ -452,7 +454,7 @@ impl<'a> Graphics<'a> {
             tex_coords,
         };
 
-        self.get_operation_block(self.texture_context.white_texture.clone())
+        self.get_operation_block(&self.texture_context.white_texture)
             .push_render_operation(operation)
     }
 
@@ -473,13 +475,13 @@ impl<'a> Graphics<'a> {
         };
 
         let position: RenderPosition = rect.into();
-        let color_matrix = ColorMatrix::from_color(Color::rgb(1.0, 1.0, 1.0));
+        let color_matrix = DEFAULT_COLOR_MATRIX;
         let operation = RenderOperation {
             position,
             color_matrix,
             tex_coords,
         };
-        self.get_operation_block(sprite.texture.clone())
+        self.get_operation_block(&sprite.texture)
             .push_render_operation(operation)
     }
 
@@ -512,7 +514,7 @@ impl<'a> Graphics<'a> {
         let texture = font_for_px
             .borrow_mut()
             .get_or_create_texture(self.device, self.texture_context);
-        self.get_operation_block(texture)
+        self.get_operation_block(&texture)
             .operations
             .append(&mut operations);
     }
@@ -530,15 +532,16 @@ impl<'a> Graphics<'a> {
         self.size
     }
 
-    fn get_operation_block(&mut self, texture: Rc<Texture>) -> &mut OperationBlock {
+    fn get_operation_block(&mut self, texture: &Rc<Texture>) -> &mut OperationBlock {
         let need_new = !matches!(&self.current_operation_block, Some(operation_block) if operation_block.texture.id == texture.id);
         if need_new {
             self.prepare_current_block();
 
-            self.current_operation_block = Some(OperationBlock::with_texture(texture));
+            self.current_operation_block
+                .insert(OperationBlock::with_texture(texture.clone()))
+        } else {
+            self.current_operation_block.as_mut().unwrap()
         }
-
-        self.current_operation_block.as_mut().unwrap()
     }
 
     fn prepare_current_block(&mut self) {
@@ -644,7 +647,7 @@ pub struct SizeInPx {
 }
 
 impl SizeInPx {
-    pub fn new(width: u32, height: u32) -> Self {
+    pub const fn new(width: u32, height: u32) -> Self {
         Self { width, height }
     }
 }
@@ -678,11 +681,11 @@ impl From<Color> for wgpu::Color {
 }
 
 impl Color {
-    pub fn rgb(r: f32, g: f32, b: f32) -> Self {
+    pub const fn rgb(r: f32, g: f32, b: f32) -> Self {
         Self { r, g, b, a: 1.0 }
     }
 
-    pub fn rgba(r: f32, g: f32, b: f32, a: f32) -> Self {
+    pub const fn rgba(r: f32, g: f32, b: f32, a: f32) -> Self {
         Self { r, g, b, a }
     }
 }

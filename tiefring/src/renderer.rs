@@ -7,7 +7,7 @@ use wgpu::{
 };
 
 use crate::{
-    cache::{Resetable, ReusableBuffer},
+    cache::ReusableBuffer,
     camera::Camera,
     sprite::{Texture, TextureContext},
     Color, DrawData, OperationBlock, Rect, RenderPosition,
@@ -42,7 +42,7 @@ pub(crate) struct ColorMatrix {
 }
 
 impl ColorMatrix {
-    pub fn from_color(color: Color) -> Self {
+    pub const fn from_color(color: Color) -> Self {
         let matrix = [
             [color.r, 0.0, 0.0, 0.0],
             [0.0, color.g, 0.0, 0.0],
@@ -54,7 +54,7 @@ impl ColorMatrix {
         Self { matrix, adjust }
     }
 
-    pub fn for_text(color: Color) -> Self {
+    pub const fn for_text(color: Color) -> Self {
         let matrix = [
             [0.0, 0.0, 0.0, color.a],
             [0.0, 0.0, 0.0, 0.0],
@@ -340,7 +340,7 @@ impl RenderPreper {
             return None;
         }
 
-        self.instances.reset_with_capacity(count);
+        self.instances.clear();
         self.instances
             .extend(operation_block.operations.iter().map(|operation| {
                 Instance::new(

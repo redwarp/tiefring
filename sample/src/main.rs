@@ -1,7 +1,10 @@
-use std::f32::consts::PI;
+use std::{
+    f32::consts::PI,
+    time::{Duration, Instant},
+};
 
-use fps_counter::FPSCounter;
 use tiefring::{Canvas, CanvasSettings, Color, Position};
+use utils::Averager;
 use winit::{
     dpi::LogicalSize,
     event::{Event, VirtualKeyCode},
@@ -9,6 +12,8 @@ use winit::{
     window::WindowBuilder,
 };
 use winit_input_helper::WinitInputHelper;
+
+mod utils;
 
 const WIDTH: u32 = 640;
 const HEIGHT: u32 = 480;
@@ -75,12 +80,14 @@ fn main() {
     window.set_visible(true);
     let mut translation = Position::new(0.0, 0.0);
     let mut angle = PI / 4.0;
-    let mut fps_counter = FPSCounter::new();
+
+    let mut averager: Averager<Duration> = Averager::new(Duration::from_secs(1));
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
 
         if let Event::MainEventsCleared = event {
+            let start = Instant::now();
             canvas
                 .draw(|graphics| {
                     graphics.with_translation(translation, |graphics| {
@@ -179,14 +186,24 @@ fn main() {
 
                         graphics.draw_text(
                             &mut vt323_regular,
-                            format!("FPS: {}", fps_counter.tick()),
+                            format!("FPS: {}", averager.ticks()),
                             20,
                             Position::new(10.0, 400.0),
+                            Color::rgb(1.0, 1.0, 1.0),
+                        );
+
+                        graphics.draw_text(
+                            &mut vt323_regular,
+                            format!("Time for one frame: {:?}", averager.average()),
+                            20,
+                            Position::new(10.0, 420.0),
                             Color::rgb(1.0, 1.0, 1.0),
                         );
                     });
                 })
                 .unwrap();
+
+            averager.feed(start.elapsed());
         }
 
         if input.update(&event) {
