@@ -298,6 +298,12 @@ impl RenderOperation {
         self
     }
 
+    pub fn alpha(&mut self, alpha: f32) -> &mut Self {
+        self.color_matrix.matrix[3][3] *= alpha;
+
+        self
+    }
+
     /// Calculate a rotation matrix centered at the x and y passed.
     /// Using this https://www.brainvoyager.com/bv/doc/UsersGuide/CoordsAndTransforms/SpatialTransformationMatrices.html
     /// for the base matrices, and using wolfgram alpha to reduce the operations of translate, rotate, translate back to one single matrix.

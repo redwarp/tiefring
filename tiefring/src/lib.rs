@@ -533,7 +533,7 @@ impl<'a> Graphics<'a> {
     }
 
     fn get_operation_block(&mut self, texture: &Rc<Texture>) -> &mut OperationBlock {
-        let need_new = !matches!(&self.current_operation_block, Some(operation_block) if operation_block.texture.id == texture.id);
+        let need_new = !matches!(&self.current_operation_block, Some(operation_block) if operation_block.texture.id == texture.id && operation_block.operations.len() < 2048);
         if need_new {
             self.prepare_current_block();
 
@@ -801,7 +801,10 @@ impl RenderPosition {
 impl From<Rect> for RenderPosition {
     fn from(rect: Rect) -> Self {
         let transformation = Mat4::from_translation(Vec3::new(rect.left, rect.top, 0.0));
-        let scale = Position::new(rect.width, rect.height);
+        let scale = Position {
+            x: rect.width,
+            y: rect.height,
+        };
         Self {
             transformation,
             scale,
