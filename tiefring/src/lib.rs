@@ -3,6 +3,7 @@ use std::{
     rc::Rc,
 };
 
+use cache::TransformCache;
 use glam::{Mat4, Vec3};
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use resources::Resources;
@@ -51,6 +52,7 @@ pub struct GraphicsRenderer {
     draw_datas: Vec<DrawData>,
     renderer: Renderer,
     buffer_cache: BufferCache,
+    transform_cache: TransformCache,
     camera: Camera,
     size: SizeInPx,
     texture_context: TextureContext,
@@ -75,6 +77,7 @@ impl GraphicsRenderer {
 
         let renderer = Renderer::new(device, &texture_context, &camera);
         let buffer_cache = BufferCache::new();
+        let transform_cache = TransformCache::new();
         let size = SizeInPx { width, height };
 
         let text_converter = TextConverter::new();
@@ -84,6 +87,7 @@ impl GraphicsRenderer {
             draw_datas,
             renderer,
             buffer_cache,
+            transform_cache,
             camera,
             size,
             texture_context,
@@ -108,12 +112,15 @@ impl GraphicsRenderer {
             &self.texture_context,
             &mut self.draw_datas,
             &mut self.buffer_cache,
+            &mut self.transform_cache,
             &mut self.text_converter,
             &mut self.render_preper,
         );
 
         prepare_function(&mut graphics);
         graphics.prepare_current_block();
+
+        self.cleanup();
     }
 
     pub fn render<'rpass>(&'rpass mut self, render_pass: &mut RenderPass<'rpass>) {
@@ -147,11 +154,15 @@ impl GraphicsRenderer {
     }
 
     fn reset(&mut self) {
-        // We cleanup buffers that were not reused previously.
-        self.buffer_cache.clear();
         for draw_data in self.draw_datas.drain(..) {
             self.buffer_cache.release_buffer(draw_data.instance_buffer);
         }
+    }
+
+    fn cleanup(&mut self) {
+        // We cleanup buffers that were not reused previously.
+        self.buffer_cache.clear();
+        self.transform_cache.free_unused();
     }
 }
 
@@ -409,6 +420,7 @@ pub struct Graphics<'a> {
     draw_datas: &'a mut Vec<DrawData>,
     render_preper: &'a mut RenderPreper,
     buffer_cache: &'a mut BufferCache,
+    transform_cache: &'a mut TransformCache,
     texture_context: &'a TextureContext,
     text_converter: &'a mut TextConverter,
 }
@@ -422,6 +434,7 @@ impl<'a> Graphics<'a> {
         texture_context: &'a TextureContext,
         draw_datas: &'a mut Vec<DrawData>,
         buffer_cache: &'a mut BufferCache,
+        transform_cache: &'a mut TransformCache,
         text_converter: &'a mut TextConverter,
         render_preper: &'a mut RenderPreper,
     ) -> Self {
@@ -436,23 +449,28 @@ impl<'a> Graphics<'a> {
             text_converter,
             render_preper,
             buffer_cache,
+            transform_cache,
         }
     }
 
     pub fn draw_rect<R: Into<Rect>>(&mut self, rect: R, color: Color) -> &mut RenderOperation {
         let tex_coords = Rect::new(0.0, 0.0, 1.0, 1.0);
 
-        let rect: Rect = if let Some(translation) = self.translation {
-            rect.into().translated(translation.left, translation.top)
-        } else {
-            rect.into()
-        };
-        let position: RenderPosition = rect.into();
+        let rect: Rect = rect.into();
+        let mut transforms = self.transform_cache.get();
+        if let Some(translation) = self.translation {
+            transforms.push(renderer::Transform::Translate {
+                x: translation.left,
+                y: translation.top,
+            });
+        }
         let color_matrix = ColorMatrix::from_color(color);
+
         let operation = RenderOperation {
-            position,
+            rect,
             color_matrix,
             tex_coords,
+            transforms,
         };
 
         self.get_operation_block(&self.texture_context.white_texture)
@@ -473,18 +491,21 @@ impl<'a> Graphics<'a> {
         rect: R,
     ) -> &mut RenderOperation {
         let tex_coords = sprite.tex_coords;
-        let rect: Rect = if let Some(translation) = self.translation {
-            rect.into().translated(translation.left, translation.top)
-        } else {
-            rect.into()
-        };
 
-        let position: RenderPosition = rect.into();
+        let rect: Rect = rect.into();
+        let mut transforms = self.transform_cache.get();
+        if let Some(translation) = self.translation {
+            transforms.push(renderer::Transform::Translate {
+                x: translation.left,
+                y: translation.top,
+            });
+        }
         let color_matrix = DEFAULT_COLOR_MATRIX;
         let operation = RenderOperation {
-            position,
+            rect,
             color_matrix,
             tex_coords,
+            transforms,
         };
         self.get_operation_block(&sprite.texture)
             .push_render_operation(operation)
@@ -511,6 +532,7 @@ impl<'a> Graphics<'a> {
             self.device,
             self.queue,
             self.texture_context,
+            self.transform_cache,
         );
 
         let texture = font_for_px
@@ -556,6 +578,7 @@ impl<'a> Graphics<'a> {
                     self.device,
                     self.queue,
                     operation_block,
+                    self.transform_cache,
                 )
             })
         {

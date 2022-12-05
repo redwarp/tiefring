@@ -5,7 +5,7 @@ use wgpu::{
 };
 
 use crate::{
-    cache::ReusableBuffer,
+    cache::{ReusableBuffer, TransformCache},
     camera::Camera,
     sprite::{Texture, TextureContext},
     Color, DrawData, OperationBlock, Rect, RenderPosition,
@@ -271,21 +271,29 @@ impl Renderer {
     }
 }
 
+pub(crate) enum Transform {
+    Rotate(f32),
+    Translate { x: f32, y: f32 },
+}
+
 pub struct RenderOperation {
     pub(crate) tex_coords: Rect,
-    pub(crate) position: RenderPosition,
+    pub(crate) rect: Rect,
     pub(crate) color_matrix: ColorMatrix,
+    pub(crate) transforms: Vec<Transform>,
 }
 
 impl RenderOperation {
     pub fn rotate(&mut self, angle: f32) -> &mut Self {
-        self.position.rotate(angle);
+        self.transforms.push(Transform::Rotate(angle));
+        // self.position.rotate(angle);
 
         self
     }
 
     pub fn translate(&mut self, x: f32, y: f32) -> &mut Self {
-        self.position.translate(x, y);
+        self.transforms.push(Transform::Translate { x, y });
+        // self.position.translate(x, y);
 
         self
     }
@@ -312,6 +320,7 @@ impl RenderPreper {
         device: &Device,
         queue: &Queue,
         operation_block: OperationBlock,
+        transform_cache: &mut TransformCache,
     ) -> Option<DrawData> {
         let count = operation_block.operations.len();
         if count == 0 {
@@ -321,11 +330,21 @@ impl RenderPreper {
         self.instances.clear();
         self.instances
             .extend(operation_block.operations.into_iter().map(|operation| {
-                Instance::new(
-                    operation.tex_coords,
-                    operation.position,
-                    operation.color_matrix,
-                )
+                let mut position: RenderPosition = operation.rect.into();
+
+                for transform in &operation.transforms {
+                    match transform {
+                        Transform::Rotate(angle) => {
+                            position.rotate(*angle);
+                        }
+                        Transform::Translate { x, y } => {
+                            position.translate(*x, *y);
+                        }
+                    }
+                }
+
+                transform_cache.release(operation.transforms);
+                Instance::new(operation.tex_coords, position, operation.color_matrix)
             }));
 
         let instance_buffer = buffer_cache.get_buffer(

@@ -5,6 +5,7 @@ use rect_packer::Packer;
 use wgpu::{BindGroup, BindGroupLayout, Device, Queue, Sampler};
 
 use crate::{
+    cache::TransformCache,
     renderer::{ColorMatrix, RenderOperation},
     sprite::{Texture, TextureContext, TextureId, TEXTURE_INDEX},
     Color, Error, Position, Rect,
@@ -266,6 +267,7 @@ impl TextConverter {
         device: &Device,
         queue: &Queue,
         texture_context: &TextureContext,
+        transform_cache: &mut TransformCache,
     ) -> Vec<RenderOperation> {
         let char_count: usize = text.len();
 
@@ -294,14 +296,15 @@ impl TextConverter {
             .glyphs()
             .iter()
             .filter_map(|glyph| {
-                let position = Rect::new(glyph.x, glyph.y, glyph.width as f32, glyph.height as f32);
+                let rect = Rect::new(glyph.x, glyph.y, glyph.width as f32, glyph.height as f32);
 
                 font_for_px
                     .get_or_create_character(glyph.parent, device, queue, texture_context)
                     .map(|character| RenderOperation {
                         tex_coords: character.tex_coords,
-                        position: position.into(),
+                        rect,
                         color_matrix,
+                        transforms: transform_cache.get(),
                     })
             })
             .collect();

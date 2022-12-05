@@ -211,8 +211,8 @@ fn main() {
                             count += 1;
                             graphics
                                 .draw_sprite(&star, (position.x, position.y))
-                                .alpha(particle_lifetime.freshness())
-                                .rotate(TAU * particle_lifetime.freshness());
+                                .rotate(TAU * particle_lifetime.freshness())
+                                .alpha(particle_lifetime.freshness());
                         }
 
                         let fps = fps_counter.tick();
