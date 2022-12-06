@@ -9,6 +9,6 @@ pub struct MoveAction {
 
 #[derive(Component)]
 pub struct AttackAction {
-    pub entity: Entity,
+    pub attacker: Entity,
     pub target: Entity,
 }

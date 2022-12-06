@@ -80,3 +80,26 @@ impl Health {
         Self { hp: max_hp, max_hp }
     }
 }
+
+#[derive(Component)]
+pub struct Stats {
+    pub strength: i32,
+    pub dexterity: i32,
+    pub constitution: i32,
+    pub magic: i32,
+}
+
+impl Stats {
+    pub fn new(strength: i32, dexterity: i32, constitution: i32, magic: i32) -> Self {
+        Self {
+            strength,
+            dexterity,
+            constitution,
+            magic,
+        }
+    }
+
+    pub fn max_health(&self) -> i32 {
+        10 + self.constitution * 2
+    }
+}

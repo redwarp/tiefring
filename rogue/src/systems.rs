@@ -5,7 +5,9 @@ use torchbearer::path::PathMap;
 
 use crate::{
     actions::{AttackAction, MoveAction},
-    components::{Health, Monster, MoveClose, MoveRandom, Name, Player, Position, Solid, Vision},
+    components::{
+        Health, Monster, MoveClose, MoveRandom, Name, Player, Position, Solid, Stats, Vision,
+    },
     effects::HealthEffect,
     game::{PlayerData, Random},
     map::Map,
@@ -86,14 +88,17 @@ pub fn move_action(
 pub fn attack_action(
     mut commands: Commands,
     attack_actions: Query<&AttackAction>,
+    attacker_stats: Query<&Stats>,
     health_stats: Query<&Health>,
 ) {
-    attack_actions.for_each(|&AttackAction { entity: _, target }| {
-        if health_stats.get(target).is_ok() {
-            commands.spawn(HealthEffect {
-                entity: target,
-                amount: -8,
-            });
+    attack_actions.for_each(|&AttackAction { attacker, target }| {
+        if let Ok(stats) = attacker_stats.get(attacker) {
+            if health_stats.get(target).is_ok() {
+                commands.spawn(HealthEffect {
+                    entity: target,
+                    amount: -stats.strength,
+                });
+            }
         }
     });
 }

@@ -13,7 +13,7 @@ use torchbearer::path::PathMap;
 
 use crate::{
     actions::{AttackAction, MoveAction},
-    components::{Health, Monster, Player, Position},
+    components::{Health, Monster, Player, Position, Stats},
     inputs::Input,
     map::Map,
     spawner, systems,
@@ -28,7 +28,6 @@ pub enum RunState {
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum Update {
-    Refresh,
     Exit,
     NoOp,
 }
@@ -140,7 +139,12 @@ impl Game {
         let random = Random::new();
         world.insert_resource(random);
 
-        let player = spawner::player(&mut world, starting_position.x, starting_position.y);
+        let player = spawner::player(
+            &mut world,
+            starting_position.x,
+            starting_position.y,
+            Stats::new(10, 10, 10, 10),
+        );
         let player_data = PlayerData {
             entity: player,
             position: starting_position,
@@ -162,7 +166,7 @@ impl Game {
                 self.schedule.run(&mut self.world);
                 self.world
                     .insert_resource::<RunState>(RunState::WaitingForInput);
-                Update::Refresh
+                Update::NoOp
             }
             RunState::WaitingForInput => {
                 if let Some(Input::Escape) = input {
@@ -180,7 +184,7 @@ impl Game {
                 self.schedule.run(&mut self.world);
                 self.world
                     .insert_resource::<RunState>(RunState::WaitingForInput);
-                Update::Refresh
+                Update::NoOp
             }
         };
 
@@ -229,7 +233,7 @@ impl Game {
         {
             if *monster_position == position {
                 attack_action = Some(AttackAction {
-                    entity: player_entity,
+                    attacker: player_entity,
                     target,
                 });
                 break;

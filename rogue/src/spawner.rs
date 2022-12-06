@@ -1,19 +1,21 @@
 use bevy_ecs::prelude::{Commands, Entity, World};
 
 use crate::components::{
-    Body, BodyType, Health, Monster, MoveClose, MoveRandom, Name, Player, Position, Solid, Vision,
+    Body, BodyType, Health, Monster, MoveClose, MoveRandom, Name, Player, Position, Solid, Stats,
+    Vision,
 };
 
-pub fn player(world: &mut World, x: i32, y: i32) -> Entity {
+pub fn player(world: &mut World, x: i32, y: i32, stats: Stats) -> Entity {
     world
         .spawn((
             Player,
             Position::new(x, y),
             Body::new(BodyType::Hero),
             Vision::new(8),
-            Health::full_health(32),
+            Health::full_health(stats.max_health()),
             Solid,
             Name("Player".to_string()),
+            stats,
         ))
         .id()
 }

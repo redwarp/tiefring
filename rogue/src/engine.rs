@@ -89,7 +89,6 @@ impl Engine {
                     canvas.set_size(size.width, size.height);
                 } else {
                     match game.update(Input::from_input_helper(&input_helper)) {
-                        Update::Refresh => {}
                         Update::Exit => {
                             *control_flow = ControlFlow::Exit;
                         }
