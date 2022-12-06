@@ -270,6 +270,7 @@ impl Renderer {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub(crate) enum Transform {
     Rotate(f32),
     Translate { x: f32, y: f32 },

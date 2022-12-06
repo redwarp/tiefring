@@ -6,7 +6,7 @@ use wgpu::{BindGroup, BindGroupLayout, Device, Queue, Sampler};
 
 use crate::{
     cache::TransformCache,
-    renderer::{ColorMatrix, RenderOperation},
+    renderer::{ColorMatrix, RenderOperation, Transform},
     sprite::{Texture, TextureContext, TextureId, TEXTURE_INDEX},
     Color, Error, Position, Rect,
 };
@@ -264,6 +264,7 @@ impl TextConverter {
         color: Color,
         position: Position,
         font_for_px: &Rc<RefCell<SizedFont>>,
+        transforms: Vec<Transform>,
         device: &Device,
         queue: &Queue,
         texture_context: &TextureContext,
@@ -300,11 +301,15 @@ impl TextConverter {
 
                 font_for_px
                     .get_or_create_character(glyph.parent, device, queue, texture_context)
-                    .map(|character| RenderOperation {
-                        tex_coords: character.tex_coords,
-                        rect,
-                        color_matrix,
-                        transforms: transform_cache.get(),
+                    .map(|character| {
+                        let mut char_transform = transform_cache.get();
+                        char_transform.extend(&transforms);
+                        RenderOperation {
+                            tex_coords: character.tex_coords,
+                            rect,
+                            color_matrix,
+                            transforms: char_transform,
+                        }
                     })
             })
             .collect();

@@ -7,6 +7,7 @@ use cache::TransformCache;
 use futures::AsyncBufferView;
 use glam::{Mat4, Vec3};
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
+use renderer::Transform;
 use resources::Resources;
 use thiserror::Error;
 use wgpu::{BufferAsyncError, CommandEncoder, Device, Queue, RenderPass};
@@ -373,7 +374,7 @@ pub struct Graphics<'a> {
     device: &'a Device,
     queue: &'a Queue,
     size: SizeInPx,
-    translation: Option<Position>,
+    transforms: Vec<Transform>,
     current_operation_block: Option<OperationBlock>,
     draw_datas: &'a mut Vec<DrawData>,
     render_preper: &'a mut RenderPreper,
@@ -400,7 +401,7 @@ impl<'a> Graphics<'a> {
             current_operation_block: None,
             draw_datas,
             size,
-            translation: None,
+            transforms: vec![],
             texture_context,
             device,
             queue,
@@ -416,12 +417,7 @@ impl<'a> Graphics<'a> {
 
         let rect: Rect = rect.into();
         let mut transforms = self.transform_cache.get();
-        if let Some(translation) = self.translation {
-            transforms.push(renderer::Transform::Translate {
-                x: translation.left,
-                y: translation.top,
-            });
-        }
+        transforms.extend(&self.transforms);
         let color_matrix = ColorMatrix::from_color(color);
 
         let operation = RenderOperation {
@@ -452,12 +448,7 @@ impl<'a> Graphics<'a> {
 
         let rect: Rect = rect.into();
         let mut transforms = self.transform_cache.get();
-        if let Some(translation) = self.translation {
-            transforms.push(renderer::Transform::Translate {
-                x: translation.left,
-                y: translation.top,
-            });
-        }
+        transforms.extend(&self.transforms);
         let color_matrix = DEFAULT_COLOR_MATRIX;
         let operation = RenderOperation {
             rect,
@@ -474,19 +465,17 @@ impl<'a> Graphics<'a> {
         T: AsRef<str>,
         P: Into<Position>,
     {
-        let position = if let Some(translation) = self.translation {
-            position
-                .into()
-                .translated(translation.left, translation.top)
-        } else {
-            position.into()
-        };
+        let position = position.into();
+
+        let mut transforms = self.transform_cache.get();
+        transforms.extend(&self.transforms);
         let font_for_px = font.get_font_for_px(px);
         let mut operations = self.text_converter.render_operation(
             text.as_ref(),
             color,
             position,
             &font_for_px,
+            transforms,
             self.device,
             self.queue,
             self.texture_context,
@@ -505,9 +494,12 @@ impl<'a> Graphics<'a> {
     where
         F: FnOnce(&mut Self),
     {
-        self.translation = Some(translation);
+        self.transforms.push(Transform::Translate {
+            x: translation.left,
+            y: translation.top,
+        });
         function(self);
-        self.translation = None;
+        self.transforms.pop();
     }
 
     pub fn size(&self) -> SizeInPx {
