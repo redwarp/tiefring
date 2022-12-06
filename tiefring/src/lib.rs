@@ -125,15 +125,7 @@ impl GraphicsRenderer {
 
     pub fn render<'rpass>(&'rpass mut self, render_pass: &mut RenderPass<'rpass>) {
         render_pass.set_bind_group(0, &self.camera.camera_bind_group, &[]);
-        for DrawData {
-            instance_buffer,
-            count,
-            texture,
-        } in self.draw_datas.iter()
-        {
-            self.renderer
-                .render(render_pass, instance_buffer, *count, texture);
-        }
+        self.renderer.render(render_pass, &self.draw_datas);
     }
 
     pub fn set_size(&mut self, width: u32, height: u32) {

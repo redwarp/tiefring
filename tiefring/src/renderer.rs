@@ -5,10 +5,8 @@ use wgpu::{
 };
 
 use crate::{
-    cache::{ReusableBuffer, TransformCache},
-    camera::Camera,
-    sprite::{Texture, TextureContext},
-    Color, DrawData, OperationBlock, Rect, RenderPosition,
+    cache::TransformCache, camera::Camera, sprite::TextureContext, Color, DrawData, OperationBlock,
+    Rect, RenderPosition,
 };
 
 #[repr(C)]
@@ -258,16 +256,17 @@ impl Renderer {
     pub(crate) fn render<'a>(
         &'a self,
         render_pass: &mut RenderPass<'a>,
-        instance_buffer: &'a ReusableBuffer,
-        count: u32,
-        texture: &'a Texture,
+        draw_data: &'a [DrawData],
     ) {
         render_pass.set_pipeline(&self.render_pipeline);
-        render_pass.set_bind_group(1, &texture.texture_bind_group, &[]);
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-        render_pass.set_vertex_buffer(1, instance_buffer.slice());
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-        render_pass.draw_indexed(0..6, 0, 0..count);
+
+        for draw_data in draw_data.iter() {
+            render_pass.set_bind_group(1, &draw_data.texture.texture_bind_group, &[]);
+            render_pass.set_vertex_buffer(1, draw_data.instance_buffer.slice());
+            render_pass.draw_indexed(0..6, 0, 0..draw_data.count);
+        }
     }
 }
 
