@@ -4,11 +4,12 @@ use std::{
 };
 
 use cache::TransformCache;
+use futures::AsyncBufferView;
 use glam::{Mat4, Vec3};
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use resources::Resources;
 use thiserror::Error;
-use wgpu::{CommandEncoder, Device, Queue, RenderPass};
+use wgpu::{BufferAsyncError, CommandEncoder, Device, Queue, RenderPass};
 
 use crate::{
     cache::{BufferCache, ReusableBuffer},
@@ -20,6 +21,7 @@ use crate::{
 
 mod cache;
 mod camera;
+mod futures;
 mod renderer;
 pub mod resources;
 pub mod sprite;
@@ -40,6 +42,9 @@ pub enum Error {
 
     #[error("Loading failed")]
     IOError(std::io::Error),
+
+    #[error("Couldn't take screenshot")]
+    ScreenshotFailed,
 }
 
 impl From<std::io::Error> for Error {
@@ -260,46 +265,6 @@ impl Canvas {
         Ok(())
     }
 
-    pub fn redraw_last(&mut self) -> Result<(), Error> {
-        let mut encoder: CommandEncoder =
-            self.wgpu_context
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Redraw Encoder"),
-                });
-
-        let surface_texture = self
-            .wgpu_context
-            .surface
-            .get_current_texture()
-            .map_err(Error::RenderingFailed)?;
-
-        encoder.copy_texture_to_texture(
-            wgpu::ImageCopyTexture {
-                texture: &self.wgpu_context.buffer_texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            wgpu::ImageCopyTexture {
-                texture: &surface_texture.texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            wgpu::Extent3d {
-                width: self.wgpu_context.size.width,
-                height: self.wgpu_context.size.height,
-                depth_or_array_layers: 1,
-            },
-        );
-
-        self.wgpu_context.queue.submit(Some(encoder.finish()));
-        surface_texture.present();
-
-        Ok(())
-    }
-
     pub fn set_size(&mut self, width: u32, height: u32) {
         self.wgpu_context.resize(width, height);
         self.graphics_renderer.set_size(width, height);
@@ -335,7 +300,8 @@ impl Canvas {
             height,
             &self.wgpu_context.buffer_texture,
         )
-        .await;
+        .await
+        .map_err(|_| Error::ScreenshotFailed)?;
 
         use image::{ImageBuffer, Rgba};
         let mut buffer = ImageBuffer::<Rgba<u8>, _>::from_raw(width, height, pixels).unwrap();
@@ -345,7 +311,7 @@ impl Canvas {
             *px = Rgba([cmp[2], cmp[1], cmp[0], cmp[3]]);
         }
 
-        buffer.save(path).unwrap();
+        buffer.save(path).map_err(|_| Error::ScreenshotFailed)?;
 
         Ok(())
     }
@@ -890,7 +856,7 @@ async fn texture_to_cpu(
     width: u32,
     height: u32,
     texture: &wgpu::Texture,
-) -> Vec<u8> {
+) -> Result<Vec<u8>, BufferAsyncError> {
     let mut encoder =
         device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
     let texture_size = wgpu::Extent3d {
@@ -930,12 +896,7 @@ async fn texture_to_cpu(
     );
     queue.submit(Some(encoder.finish()));
 
-    let buffer_slice = output_buffer.slice(..);
-    buffer_slice.map_async(wgpu::MapMode::Read, |_| {});
-
-    device.poll(wgpu::Maintain::Wait);
-
-    let padded_data = buffer_slice.get_mapped_range();
+    let padded_data = AsyncBufferView::new(output_buffer.slice(..), device).await?;
 
     let mut pixels: Vec<u8> = vec![0; (width * height * 4) as usize];
     for (padded, pixels) in padded_data
@@ -945,7 +906,7 @@ async fn texture_to_cpu(
         pixels.copy_from_slice(bytemuck::cast_slice(&padded[..unpadded_bytes_per_row]));
     }
 
-    pixels
+    Ok(pixels)
 }
 
 fn padded_bytes_per_row(width: u32) -> usize {

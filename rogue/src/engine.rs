@@ -67,22 +67,16 @@ impl Engine {
 
         window.set_visible(true);
 
-        let mut redraw = true;
-
         event_loop.run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Poll;
 
             if let Event::MainEventsCleared = event {
-                if redraw {
-                    renderer.update(&mut game);
-                    canvas
-                        .draw(|graphics| {
-                            renderer.render_game(&mut game, graphics);
-                        })
-                        .unwrap();
-                } else {
-                    canvas.redraw_last().unwrap();
-                }
+                renderer.update(&mut game);
+                canvas
+                    .draw(|graphics| {
+                        renderer.render_game(&mut game, graphics);
+                    })
+                    .unwrap();
             }
 
             if input_helper.update(&event) {
@@ -93,27 +87,19 @@ impl Engine {
 
                 if let Some(size) = input_helper.window_resized() {
                     canvas.set_size(size.width, size.height);
-
-                    redraw = true;
                 } else {
                     match game.update(Input::from_input_helper(&input_helper)) {
-                        Update::Refresh => {
-                            redraw = true;
-                        }
+                        Update::Refresh => {}
                         Update::Exit => {
                             *control_flow = ControlFlow::Exit;
                         }
-                        Update::NoOp => {
-                            redraw = false;
-                        }
+                        Update::NoOp => {}
                     }
                 }
 
                 if input_helper.key_pressed(VirtualKeyCode::P) {
                     pollster::block_on(canvas.screenshot("rogue.png")).unwrap();
                 }
-
-                window.request_redraw();
             }
         });
     }
