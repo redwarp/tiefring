@@ -285,14 +285,12 @@ pub struct RenderOperation {
 impl RenderOperation {
     pub fn rotate(&mut self, angle: f32) -> &mut Self {
         self.transforms.push(Transform::Rotate(angle));
-        // self.position.rotate(angle);
 
         self
     }
 
     pub fn translate(&mut self, x: f32, y: f32) -> &mut Self {
         self.transforms.push(Transform::Translate { x, y });
-        // self.position.translate(x, y);
 
         self
     }
