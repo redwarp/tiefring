@@ -1,4 +1,4 @@
-use glam::{Affine2, Vec2};
+use glam::{Affine2, Mat2, Vec2};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     Buffer, BufferUsages, Device, Queue, RenderPass, RenderPipeline, VertexBufferLayout,
@@ -289,9 +289,10 @@ impl RenderPosition {
     }
 
     fn centered_rotation_affine(x: f32, y: f32, angle: f32) -> Affine2 {
-        Affine2::from_translation(Vec2::new(x, y))
-            * Affine2::from_angle(angle)
-            * Affine2::from_translation(Vec2::new(-x, -y))
+        let (sin, cos) = angle.sin_cos();
+        let matrix2 = Mat2::from_cols_array(&[cos, sin, -sin, cos]);
+        let translation = Vec2::new(x * -cos + x + y * sin, -x * sin + y * -cos + y);
+        Affine2::from_mat2_translation(matrix2, translation)
     }
 
     fn into_affine2(self) -> Affine2 {
