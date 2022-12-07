@@ -5,7 +5,6 @@ use std::{
 
 use cache::TransformCache;
 use futures::AsyncBufferView;
-use glam::{Mat4, Vec3};
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use renderer::Transform;
 use resources::Resources;
@@ -775,70 +774,6 @@ impl WgpuContext {
             usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT,
             label: None,
         });
-    }
-}
-
-pub(crate) struct RenderPosition {
-    transformation: Mat4,
-    scale: Position,
-}
-
-impl RenderPosition {
-    pub fn matrix(&self) -> Mat4 {
-        let scale = Mat4::from_scale(Vec3::new(self.scale.left, self.scale.top, 1.0));
-        self.transformation * scale
-    }
-
-    pub fn translate(&mut self, x: f32, y: f32) -> &mut Self {
-        let translation_matrix = Mat4::from_translation(Vec3::new(x, y, 0.0));
-
-        self.transformation *= translation_matrix;
-
-        self
-    }
-
-    pub fn rotate(&mut self, angle: f32) -> &mut Self {
-        let angle = angle.rem_euclid(std::f32::consts::TAU);
-        let x = self.scale.left / 2.0;
-        let y = self.scale.top / 2.0;
-        let rotation_matrix = Self::centered_rotation_matrix(x, y, angle);
-
-        self.transformation *= rotation_matrix;
-        self
-    }
-
-    /// Calculate a rotation matrix centered at the x and y passed.
-    /// Using this https://www.brainvoyager.com/bv/doc/UsersGuide/CoordsAndTransforms/SpatialTransformationMatrices.html
-    /// for the base matrices, and using wolfgram alpha to reduce the operations of translate, rotate, translate back to one single matrix.
-    fn centered_rotation_matrix(x: f32, y: f32, angle: f32) -> Mat4 {
-        let cos = angle.cos();
-        let sin = angle.sin();
-        let cols = [
-            [cos, sin, 0.0, 0.0],
-            [-sin, cos, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
-            [
-                x * (-cos) + y * sin + x,
-                -x * sin + y * (-cos) + y,
-                0.0,
-                1.0,
-            ],
-        ];
-        Mat4::from_cols_array_2d(&cols)
-    }
-}
-
-impl From<Rect> for RenderPosition {
-    fn from(rect: Rect) -> Self {
-        let transformation = Mat4::from_translation(Vec3::new(rect.left, rect.top, 0.0));
-        let scale = Position {
-            left: rect.width,
-            top: rect.height,
-        };
-        Self {
-            transformation,
-            scale,
-        }
     }
 }
 

@@ -1,4 +1,4 @@
-use glam::Mat4;
+use glam::{Affine2, Vec2};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     Buffer, BufferUsages, Device, Queue, RenderPass, RenderPipeline, VertexBufferLayout,
@@ -6,7 +6,7 @@ use wgpu::{
 
 use crate::{
     cache::TransformCache, camera::Camera, sprite::TextureContext, Color, DrawData, OperationBlock,
-    Rect, RenderPosition,
+    Rect,
 };
 
 #[repr(C)]
@@ -65,14 +65,18 @@ impl ColorMatrix {
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub(crate) struct PositionMatrix {
-    matrix: [[f32; 4]; 4],
+    matrix: [[f32; 2]; 2],
+    // We only consider the first 2, the rest is padding because of the 16 byte alignment.
+    translate: [f32; 4],
 }
 
-impl PositionMatrix {
-    pub fn from_mat4(mat4: &Mat4) -> Self {
-        let matrix = mat4.to_cols_array_2d();
-
-        Self { matrix }
+impl From<Affine2> for PositionMatrix {
+    fn from(affine2: Affine2) -> Self {
+        let translate = [affine2.translation.x, affine2.translation.y, 0.0, 0.0];
+        Self {
+            matrix: affine2.matrix2.to_cols_array_2d(),
+            translate,
+        }
     }
 }
 
@@ -95,7 +99,7 @@ impl Instance {
 
         Self {
             tex_coords,
-            position_matrix: PositionMatrix::from_mat4(&position.matrix()),
+            position_matrix: position.into_affine2().into(),
             color_matrix,
         }
     }
@@ -119,7 +123,7 @@ impl Instance {
                 wgpu::VertexAttribute {
                     offset: mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
                     shader_location: 3,
-                    format: wgpu::VertexFormat::Float32x4,
+                    format: wgpu::VertexFormat::Float32x2,
                 },
                 wgpu::VertexAttribute {
                     offset: mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
@@ -144,16 +148,6 @@ impl Instance {
                 wgpu::VertexAttribute {
                     offset: mem::size_of::<[f32; 28]>() as wgpu::BufferAddress,
                     shader_location: 8,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 32]>() as wgpu::BufferAddress,
-                    shader_location: 9,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 36]>() as wgpu::BufferAddress,
-                    shader_location: 10,
                     format: wgpu::VertexFormat::Float32x4,
                 },
             ],
@@ -266,6 +260,53 @@ impl Renderer {
             render_pass.set_bind_group(1, &draw_data.texture.texture_bind_group, &[]);
             render_pass.set_vertex_buffer(1, draw_data.instance_buffer.slice());
             render_pass.draw_indexed(0..6, 0, 0..draw_data.count);
+        }
+    }
+}
+
+struct RenderPosition {
+    transformation: Affine2,
+    scale: Vec2,
+}
+
+impl RenderPosition {
+    fn translate(&mut self, x: f32, y: f32) -> &mut Self {
+        let translation_matrix = Affine2::from_translation(Vec2::new(x, y));
+
+        self.transformation = self.transformation * translation_matrix;
+
+        self
+    }
+
+    fn rotate(&mut self, angle: f32) -> &mut Self {
+        let angle = angle.rem_euclid(std::f32::consts::TAU);
+        let x = self.scale.x / 2.0;
+        let y = self.scale.y / 2.0;
+        let rotation_matrix = Self::centered_rotation_affine(x, y, angle);
+
+        self.transformation = self.transformation * rotation_matrix;
+        self
+    }
+
+    fn centered_rotation_affine(x: f32, y: f32, angle: f32) -> Affine2 {
+        Affine2::from_translation(Vec2::new(x, y))
+            * Affine2::from_angle(angle)
+            * Affine2::from_translation(Vec2::new(-x, -y))
+    }
+
+    fn into_affine2(self) -> Affine2 {
+        let scale = Affine2::from_scale(self.scale);
+        self.transformation * scale
+    }
+}
+
+impl From<Rect> for RenderPosition {
+    fn from(rect: Rect) -> Self {
+        let transformation = Affine2::from_translation(Vec2::new(rect.left, rect.top));
+        let scale = Vec2::new(rect.width, rect.height);
+        Self {
+            transformation,
+            scale,
         }
     }
 }
