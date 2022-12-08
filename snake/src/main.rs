@@ -255,15 +255,11 @@ impl Terrain {
     }
 
     fn render(&self, graphics: &mut Graphics, sprites: &Sprites) {
-        let (tile_count, _) = sprites.grass.tile_count();
-        let grasses: Vec<_> = (0..tile_count)
-            .map(|index| sprites.grass.sprite(index, 0))
-            .collect();
         for i in 0..self.size.0 {
             for j in 0..self.size.1 {
                 let sprite_index = i as usize + j as usize * self.size.0 as usize;
                 graphics.draw_sprite(
-                    unsafe { grasses.get_unchecked(*self.tiles.get_unchecked(sprite_index)) },
+                    &sprites.grass[self.tiles[sprite_index]],
                     tiefring::Position {
                         top: j as f32 * GRID_STEP,
                         left: i as f32 * GRID_STEP,

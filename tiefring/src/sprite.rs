@@ -1,4 +1,4 @@
-use std::{path::Path, rc::Rc, sync::atomic::AtomicUsize};
+use std::{ops::Index, path::Path, rc::Rc, sync::atomic::AtomicUsize};
 
 use wgpu::{BindGroup, BindGroupLayout, Device, Queue, Sampler, SamplerBindingType};
 
@@ -114,30 +114,18 @@ impl TileSet {
         )
     }
 
-    pub fn sprite(&self, x: u32, y: u32) -> &Sprite {
+    pub fn sprite(&self, x: u32, y: u32) -> Option<&Sprite> {
         let (width, height) = self.tile_count();
         if x > width || y > height {
-            panic!("x should be between 0 and {}, currently {}. y should be between 0 and {}, currently {}.", width, x, height, y);
+            return None;
         }
 
         let index = (y * width + x) as usize;
-        self.sprites
-            .get(index)
-            .expect("We already checked for out of bounds before.")
+        self.sprites.get(index)
     }
 
-    pub fn sprite_with_index(&self, index: usize) -> &Sprite {
-        if index >= self.sprites.len() {
-            panic!(
-                "Index {} out of bounds, max index is {}",
-                index,
-                self.sprites.len()
-            );
-        }
-
-        self.sprites
-            .get(index)
-            .expect("We already checked for out of bounds before.")
+    pub fn sprite_with_index(&self, index: usize) -> Option<&Sprite> {
+        self.sprites.get(index)
     }
 
     fn load_data<S, TS>(
@@ -191,6 +179,14 @@ impl TileSet {
             tile_dimensions,
             sprites,
         }
+    }
+}
+
+impl Index<usize> for TileSet {
+    type Output = Sprite;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.sprites[index]
     }
 }
 

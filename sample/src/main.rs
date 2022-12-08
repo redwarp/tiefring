@@ -131,7 +131,7 @@ fn main() {
                         let (x, y) = tile_set.tile_count();
                         for i in 0..x {
                             for j in 0..y {
-                                let sprite = tile_set.sprite(i, j);
+                                let sprite = tile_set.sprite(i, j).unwrap();
                                 graphics.draw_sprite(
                                     sprite,
                                     Position {

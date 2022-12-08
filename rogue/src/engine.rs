@@ -168,7 +168,7 @@ impl Renderer {
                                     TILE_SIZE,
                                 );
                                 graphics.draw_sprite_in_rect(
-                                    self.sprites.tiles.sprite_with_index(*tile_index),
+                                    self.sprites.tiles.sprite_with_index(*tile_index).unwrap(),
                                     rect,
                                 );
                             }
@@ -290,6 +290,7 @@ impl Sprites {
             BodyType::Deer => self.people.sprite(2, 0),
             BodyType::BonePile => self.people.sprite(0, 1),
         }
+        .unwrap()
     }
 }
 
