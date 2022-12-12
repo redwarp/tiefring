@@ -6,7 +6,7 @@ use std::{
 use cache::TransformCache;
 use futures::AsyncBufferView;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
-use renderer::Transform;
+use renderer::{prepare_draw_data, Transform};
 use resources::Resources;
 use thiserror::Error;
 use wgpu::{BufferAsyncError, CommandEncoder, Device, Queue, RenderPass};
@@ -14,7 +14,7 @@ use wgpu::{BufferAsyncError, CommandEncoder, Device, Queue, RenderPass};
 use crate::{
     cache::{BufferCache, ReusableBuffer},
     camera::{Camera, CameraSettings},
-    renderer::{ColorMatrix, RenderOperation, RenderPreper, Renderer},
+    renderer::{ColorMatrix, RenderOperation, Renderer},
     sprite::{Sprite, Texture, TextureContext},
     text::{Font, TextConverter},
 };
@@ -63,7 +63,6 @@ pub struct GraphicsRenderer {
     size: SizeInPx,
     texture_context: TextureContext,
     text_converter: TextConverter,
-    render_preper: RenderPreper,
 }
 
 impl GraphicsRenderer {
@@ -87,7 +86,6 @@ impl GraphicsRenderer {
         let size = SizeInPx { width, height };
 
         let text_converter = TextConverter::new();
-        let render_preper = RenderPreper::new();
 
         Self {
             draw_datas,
@@ -98,7 +96,6 @@ impl GraphicsRenderer {
             size,
             texture_context,
             text_converter,
-            render_preper,
         }
     }
 
@@ -120,7 +117,6 @@ impl GraphicsRenderer {
             &mut self.buffer_cache,
             &mut self.transform_cache,
             &mut self.text_converter,
-            &mut self.render_preper,
         );
 
         prepare_function(&mut graphics);
@@ -377,7 +373,6 @@ pub struct Graphics<'a> {
     transforms: Vec<Transform>,
     current_operation_block: Option<OperationBlock>,
     draw_datas: &'a mut Vec<DrawData>,
-    render_preper: &'a mut RenderPreper,
     buffer_cache: &'a mut BufferCache,
     transform_cache: &'a mut TransformCache,
     texture_context: &'a TextureContext,
@@ -395,7 +390,6 @@ impl<'a> Graphics<'a> {
         buffer_cache: &'a mut BufferCache,
         transform_cache: &'a mut TransformCache,
         text_converter: &'a mut TextConverter,
-        render_preper: &'a mut RenderPreper,
     ) -> Self {
         Graphics {
             current_operation_block: None,
@@ -406,7 +400,6 @@ impl<'a> Graphics<'a> {
             device,
             queue,
             text_converter,
-            render_preper,
             buffer_cache,
             transform_cache,
         }
@@ -523,7 +516,7 @@ impl<'a> Graphics<'a> {
             .current_operation_block
             .take()
             .and_then(|operation_block| {
-                self.render_preper.prepare(
+                prepare_draw_data(
                     self.buffer_cache,
                     self.device,
                     self.queue,

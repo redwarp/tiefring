@@ -345,59 +345,47 @@ impl RenderOperation {
     }
 }
 
-pub(crate) struct RenderPreper {
-    instances: Vec<Instance>,
-}
-
-impl RenderPreper {
-    pub fn new() -> Self {
-        Self { instances: vec![] }
+pub(crate) fn prepare_draw_data(
+    buffer_cache: &mut crate::cache::BufferCache,
+    device: &Device,
+    queue: &Queue,
+    operation_block: OperationBlock,
+    transform_cache: &mut TransformCache,
+) -> Option<DrawData> {
+    let count = operation_block.operations.len();
+    if count == 0 {
+        return None;
     }
 
-    pub fn prepare(
-        &mut self,
-        buffer_cache: &mut crate::cache::BufferCache,
-        device: &Device,
-        queue: &Queue,
-        operation_block: OperationBlock,
-        transform_cache: &mut TransformCache,
-    ) -> Option<DrawData> {
-        let count = operation_block.operations.len();
-        if count == 0 {
-            return None;
+    let instances = (operation_block.operations.into_iter().map(|operation| {
+        let mut position: RenderPosition = operation.rect.into();
+
+        for transform in &operation.transforms {
+            match transform {
+                Transform::Rotate(angle) => {
+                    position.rotate(*angle);
+                }
+                Transform::Translate { x, y } => {
+                    position.translate(*x, *y);
+                }
+            }
         }
 
-        self.instances.clear();
-        self.instances
-            .extend(operation_block.operations.into_iter().map(|operation| {
-                let mut position: RenderPosition = operation.rect.into();
+        transform_cache.release(operation.transforms);
+        Instance::new(operation.tex_coords, position, operation.color_matrix)
+    }))
+    .collect::<Vec<_>>();
 
-                for transform in &operation.transforms {
-                    match transform {
-                        Transform::Rotate(angle) => {
-                            position.rotate(*angle);
-                        }
-                        Transform::Translate { x, y } => {
-                            position.translate(*x, *y);
-                        }
-                    }
-                }
+    let instance_buffer = buffer_cache.get_buffer(
+        device,
+        queue,
+        bytemuck::cast_slice(instances.as_slice()),
+        BufferUsages::VERTEX,
+    );
 
-                transform_cache.release(operation.transforms);
-                Instance::new(operation.tex_coords, position, operation.color_matrix)
-            }));
-
-        let instance_buffer = buffer_cache.get_buffer(
-            device,
-            queue,
-            bytemuck::cast_slice(&self.instances[..]),
-            BufferUsages::VERTEX,
-        );
-
-        Some(DrawData {
-            instance_buffer,
-            count: count as u32,
-            texture: operation_block.texture,
-        })
-    }
+    Some(DrawData {
+        instance_buffer,
+        count: count as u32,
+        texture: operation_block.texture,
+    })
 }
