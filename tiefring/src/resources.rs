@@ -69,7 +69,7 @@ impl<'a> Resources<'a> {
 
         let svg_data = std::fs::read(&path)?;
 
-        let rtree = resvg::usvg::Tree::from_data(&svg_data, &opt.to_ref())
+        let rtree = resvg::usvg::Tree::from_data(&svg_data, &opt)
             .map_err(|_e| Error::LoadingFailed(path.as_ref().to_path_buf()))?;
         let pixmap_size = rtree.size.to_screen_size();
         let mut pixmap = resvg::tiny_skia::Pixmap::new(pixmap_size.width(), pixmap_size.height())
