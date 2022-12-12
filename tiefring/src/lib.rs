@@ -28,6 +28,7 @@ pub mod sprite;
 pub mod text;
 
 const DEFAULT_COLOR_MATRIX: ColorMatrix = ColorMatrix::from_color(Color::rgb(1.0, 1.0, 1.0));
+const OPERATION_CAPACITY: usize = 2048;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -352,7 +353,7 @@ struct OperationBlock {
 impl OperationBlock {
     fn with_texture(texture: Rc<Texture>) -> Self {
         OperationBlock {
-            operations: vec![],
+            operations: Vec::with_capacity(OPERATION_CAPACITY),
             texture,
         }
     }
@@ -506,7 +507,7 @@ impl<'a> Graphics<'a> {
     }
 
     fn get_operation_block(&mut self, texture: &Rc<Texture>) -> &mut OperationBlock {
-        let need_new = !matches!(&self.current_operation_block, Some(operation_block) if operation_block.texture.id == texture.id && operation_block.operations.len() < 4096);
+        let need_new = !matches!(&self.current_operation_block, Some(operation_block) if operation_block.texture.id == texture.id && operation_block.operations.len() < OPERATION_CAPACITY);
         if need_new {
             self.prepare_current_block();
 
