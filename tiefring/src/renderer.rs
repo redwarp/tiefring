@@ -318,14 +318,14 @@ pub(crate) fn prepare_draw_data(
     buffer_cache: &mut crate::cache::BufferCache,
     device: &Device,
     queue: &Queue,
-    operation_block: OperationBlock,
+    operation_block: &OperationBlock,
 ) -> Option<DrawData> {
     let count = operation_block.operations.len();
     if count == 0 {
         return None;
     }
 
-    let instances = (operation_block.operations.into_iter().map(|operation| {
+    let instances = (operation_block.operations.iter().map(|operation| {
         let mut position: RenderPosition = operation.rect.into();
         position.transformation = position.transformation * operation.transforms.affine;
 
@@ -343,6 +343,6 @@ pub(crate) fn prepare_draw_data(
     Some(DrawData {
         instance_buffer,
         count: count as u32,
-        texture: operation_block.texture,
+        texture: operation_block.texture.clone(),
     })
 }

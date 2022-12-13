@@ -343,7 +343,7 @@ struct OperationBlock {
 }
 
 impl OperationBlock {
-    fn with_texture(texture: Rc<Texture>) -> Self {
+    fn new(texture: Rc<Texture>) -> Self {
         OperationBlock {
             operations: Vec::with_capacity(OPERATION_CAPACITY),
             texture,
@@ -353,6 +353,12 @@ impl OperationBlock {
     fn push_render_operation(&mut self, render_operation: RenderOperation) -> &mut RenderOperation {
         self.operations.push(render_operation);
         self.operations.last_mut().expect("Just pushed an item")
+    }
+
+    fn reuse(mut self, texture: Rc<Texture>) -> Self {
+        self.operations.clear();
+        self.texture = texture;
+        self
     }
 }
 
@@ -503,24 +509,29 @@ impl<'a> Graphics<'a> {
     fn get_operation_block(&mut self, texture: &Rc<Texture>) -> &mut OperationBlock {
         let need_new = !matches!(&self.current_operation_block, Some(operation_block) if operation_block.texture.id == texture.id && operation_block.operations.len() < OPERATION_CAPACITY);
         if need_new {
-            self.prepare_current_block();
+            let new_block = if let Some(previous_block) = self.prepare_current_block() {
+                previous_block.reuse(texture.clone())
+            } else {
+                OperationBlock::new(texture.clone())
+            };
 
-            self.current_operation_block
-                .insert(OperationBlock::with_texture(texture.clone()))
+            self.current_operation_block.insert(new_block)
         } else {
             self.current_operation_block.as_mut().unwrap()
         }
     }
 
-    fn prepare_current_block(&mut self) {
-        if let Some(draw_data) = self
-            .current_operation_block
-            .take()
-            .and_then(|operation_block| {
-                prepare_draw_data(self.buffer_cache, self.device, self.queue, operation_block)
-            })
-        {
-            self.draw_datas.push(draw_data);
+    fn prepare_current_block(&mut self) -> Option<OperationBlock> {
+        if let Some(operation_block) = self.current_operation_block.take() {
+            if let Some(draw_data) =
+                prepare_draw_data(self.buffer_cache, self.device, self.queue, &operation_block)
+            {
+                self.draw_datas.push(draw_data);
+            }
+
+            Some(operation_block)
+        } else {
+            None
         }
     }
 
