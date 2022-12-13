@@ -1,12 +1,13 @@
 use std::{
+    ops::{Mul, MulAssign},
     path::{Path, PathBuf},
     rc::Rc,
 };
 
-use cache::TransformCache;
 use futures::AsyncBufferView;
+use glam::{Affine2, Mat2, Vec2};
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
-use renderer::{prepare_draw_data, Transform};
+use renderer::prepare_draw_data;
 use resources::Resources;
 use thiserror::Error;
 use wgpu::{BufferAsyncError, CommandEncoder, Device, Queue, RenderPass};
@@ -58,7 +59,6 @@ pub struct GraphicsRenderer {
     draw_datas: Vec<DrawData>,
     renderer: Renderer,
     buffer_cache: BufferCache,
-    transform_cache: TransformCache,
     camera: Camera,
     size: SizeInPx,
     texture_context: TextureContext,
@@ -82,7 +82,6 @@ impl GraphicsRenderer {
 
         let renderer = Renderer::new(device, &texture_context, &camera);
         let buffer_cache = BufferCache::new();
-        let transform_cache = TransformCache::new();
         let size = SizeInPx { width, height };
 
         let text_converter = TextConverter::new();
@@ -91,7 +90,6 @@ impl GraphicsRenderer {
             draw_datas,
             renderer,
             buffer_cache,
-            transform_cache,
             camera,
             size,
             texture_context,
@@ -115,7 +113,6 @@ impl GraphicsRenderer {
             &self.texture_context,
             &mut self.draw_datas,
             &mut self.buffer_cache,
-            &mut self.transform_cache,
             &mut self.text_converter,
         );
 
@@ -156,7 +153,6 @@ impl GraphicsRenderer {
     fn cleanup(&mut self) {
         // We cleanup buffers that were not reused previously.
         self.buffer_cache.clear();
-        self.transform_cache.free_unused();
     }
 }
 
@@ -374,7 +370,6 @@ pub struct Graphics<'a> {
     current_operation_block: Option<OperationBlock>,
     draw_datas: &'a mut Vec<DrawData>,
     buffer_cache: &'a mut BufferCache,
-    transform_cache: &'a mut TransformCache,
     texture_context: &'a TextureContext,
     text_converter: &'a mut TextConverter,
 }
@@ -388,7 +383,6 @@ impl<'a> Graphics<'a> {
         texture_context: &'a TextureContext,
         draw_datas: &'a mut Vec<DrawData>,
         buffer_cache: &'a mut BufferCache,
-        transform_cache: &'a mut TransformCache,
         text_converter: &'a mut TextConverter,
     ) -> Self {
         Graphics {
@@ -401,7 +395,6 @@ impl<'a> Graphics<'a> {
             queue,
             text_converter,
             buffer_cache,
-            transform_cache,
         }
     }
 
@@ -409,8 +402,7 @@ impl<'a> Graphics<'a> {
         let tex_coords = Rect::new(0.0, 0.0, 1.0, 1.0);
 
         let rect: Rect = rect.into();
-        let mut transforms = self.transform_cache.get();
-        transforms.extend(&self.transforms);
+        let transforms = self.current_transform();
         let color_matrix = ColorMatrix::from_color(color);
 
         let operation = RenderOperation {
@@ -440,8 +432,7 @@ impl<'a> Graphics<'a> {
         let tex_coords = sprite.tex_coords;
 
         let rect: Rect = rect.into();
-        let mut transforms = self.transform_cache.get();
-        transforms.extend(&self.transforms);
+        let transforms = self.current_transform();
         let color_matrix = DEFAULT_COLOR_MATRIX;
         let operation = RenderOperation {
             rect,
@@ -460,8 +451,7 @@ impl<'a> Graphics<'a> {
     {
         let position = position.into();
 
-        let mut transforms = self.transform_cache.get();
-        transforms.extend(&self.transforms);
+        let transforms = self.current_transform();
         let font_for_px = font.get_font_for_px(px);
         let mut operations = self.text_converter.render_operation(
             text.as_ref(),
@@ -472,7 +462,6 @@ impl<'a> Graphics<'a> {
             self.device,
             self.queue,
             self.texture_context,
-            self.transform_cache,
         );
 
         let texture = font_for_px
@@ -487,10 +476,22 @@ impl<'a> Graphics<'a> {
     where
         F: FnOnce(&mut Self),
     {
-        self.transforms.push(Transform::Translate {
-            x: translation.left,
-            y: translation.top,
-        });
+        let mut transform = self.current_transform();
+        transform.translate(translation.left, translation.top);
+
+        self.transforms.push(transform);
+        function(self);
+        self.transforms.pop();
+    }
+
+    pub fn with_rotation<F>(&mut self, angle: f32, function: F)
+    where
+        F: FnOnce(&mut Self),
+    {
+        let mut transform = self.current_transform();
+        transform.rotate(angle);
+
+        self.transforms.push(transform);
         function(self);
         self.transforms.pop();
     }
@@ -516,16 +517,18 @@ impl<'a> Graphics<'a> {
             .current_operation_block
             .take()
             .and_then(|operation_block| {
-                prepare_draw_data(
-                    self.buffer_cache,
-                    self.device,
-                    self.queue,
-                    operation_block,
-                    self.transform_cache,
-                )
+                prepare_draw_data(self.buffer_cache, self.device, self.queue, operation_block)
             })
         {
             self.draw_datas.push(draw_data);
+        }
+    }
+
+    fn current_transform(&self) -> Transform {
+        if let Some(last) = self.transforms.last() {
+            *last
+        } else {
+            Transform::default()
         }
     }
 }
@@ -768,6 +771,86 @@ impl WgpuContext {
             usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT,
             label: None,
         });
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Transform {
+    affine: Affine2,
+}
+
+impl Transform {
+    pub fn new() -> Self {
+        Self {
+            affine: Affine2::IDENTITY,
+        }
+    }
+
+    pub fn from_translation(x: f32, y: f32) -> Self {
+        Self {
+            affine: Affine2::from_translation(Vec2::new(x, y)),
+        }
+    }
+
+    pub fn translate(&mut self, x: f32, y: f32) {
+        self.affine = self.affine * Affine2::from_translation(Vec2::new(x, y));
+    }
+
+    pub fn scale(&mut self, x: f32, y: f32) {
+        self.affine = self.affine * Affine2::from_scale(Vec2::new(x, y));
+    }
+
+    pub fn rotate(&mut self, angle: f32) {
+        self.affine = self.affine * Affine2::from_angle(angle);
+    }
+
+    pub fn rotate_centered(&mut self, angle: f32, x: f32, y: f32) {
+        let (sin, cos) = angle.sin_cos();
+        let matrix2 = Mat2::from_cols_array(&[cos, sin, -sin, cos]);
+        let translation = Vec2::new(x * -cos + x + y * sin, -x * sin + y * -cos + y);
+        self.affine = self.affine * Affine2::from_mat2_translation(matrix2, translation);
+    }
+}
+
+impl Mul for Transform {
+    type Output = Self;
+
+    fn mul(mut self, rhs: Self) -> Self::Output {
+        self.affine = self.affine * rhs.affine;
+        self
+    }
+}
+
+impl MulAssign for Transform {
+    fn mul_assign(&mut self, rhs: Self) {
+        self.affine = self.affine * rhs.affine;
+    }
+}
+
+impl Mul<Option<&Transform>> for Transform {
+    type Output = Self;
+
+    fn mul(mut self, rhs: Option<&Transform>) -> Self::Output {
+        if let Some(rhs) = rhs {
+            self.affine = self.affine * rhs.affine;
+        }
+        self
+    }
+}
+
+impl MulAssign<Option<&Transform>> for Transform {
+    fn mul_assign(&mut self, rhs: Option<&Transform>) {
+        if let Some(rhs) = rhs {
+            self.affine = self.affine * rhs.affine;
+        }
+    }
+}
+
+impl Default for Transform {
+    fn default() -> Self {
+        Self {
+            affine: Affine2::IDENTITY,
+        }
     }
 }
 

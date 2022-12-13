@@ -1,12 +1,11 @@
-use glam::{Affine2, Mat2, Vec2};
+use glam::{Affine2, Vec2};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     Buffer, BufferUsages, Device, Queue, RenderPass, RenderPipeline, VertexBufferLayout,
 };
 
 use crate::{
-    cache::TransformCache, camera::Camera, sprite::TextureContext, Color, DrawData, OperationBlock,
-    Rect,
+    camera::Camera, sprite::TextureContext, Color, DrawData, OperationBlock, Rect, Transform,
 };
 
 #[repr(C)]
@@ -270,31 +269,6 @@ struct RenderPosition {
 }
 
 impl RenderPosition {
-    fn translate(&mut self, x: f32, y: f32) -> &mut Self {
-        let translation_matrix = Affine2::from_translation(Vec2::new(x, y));
-
-        self.transformation = self.transformation * translation_matrix;
-
-        self
-    }
-
-    fn rotate(&mut self, angle: f32) -> &mut Self {
-        let angle = angle.rem_euclid(std::f32::consts::TAU);
-        let x = self.scale.x / 2.0;
-        let y = self.scale.y / 2.0;
-        let rotation_matrix = Self::centered_rotation_affine(x, y, angle);
-
-        self.transformation = self.transformation * rotation_matrix;
-        self
-    }
-
-    fn centered_rotation_affine(x: f32, y: f32, angle: f32) -> Affine2 {
-        let (sin, cos) = angle.sin_cos();
-        let matrix2 = Mat2::from_cols_array(&[cos, sin, -sin, cos]);
-        let translation = Vec2::new(x * -cos + x + y * sin, -x * sin + y * -cos + y);
-        Affine2::from_mat2_translation(matrix2, translation)
-    }
-
     fn into_affine2(self) -> Affine2 {
         let scale = Affine2::from_scale(self.scale);
         self.transformation * scale
@@ -312,28 +286,23 @@ impl From<Rect> for RenderPosition {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum Transform {
-    Rotate(f32),
-    Translate { x: f32, y: f32 },
-}
-
 pub struct RenderOperation {
     pub(crate) tex_coords: Rect,
     pub(crate) rect: Rect,
     pub(crate) color_matrix: ColorMatrix,
-    pub(crate) transforms: Vec<Transform>,
+    pub(crate) transforms: Transform,
 }
 
 impl RenderOperation {
     pub fn rotate(&mut self, angle: f32) -> &mut Self {
-        self.transforms.push(Transform::Rotate(angle));
+        self.transforms
+            .rotate_centered(angle, self.rect.width / 2.0, self.rect.height / 2.0);
 
         self
     }
 
     pub fn translate(&mut self, x: f32, y: f32) -> &mut Self {
-        self.transforms.push(Transform::Translate { x, y });
+        self.transforms.translate(x, y);
 
         self
     }
@@ -350,7 +319,6 @@ pub(crate) fn prepare_draw_data(
     device: &Device,
     queue: &Queue,
     operation_block: OperationBlock,
-    transform_cache: &mut TransformCache,
 ) -> Option<DrawData> {
     let count = operation_block.operations.len();
     if count == 0 {
@@ -359,19 +327,8 @@ pub(crate) fn prepare_draw_data(
 
     let instances = (operation_block.operations.into_iter().map(|operation| {
         let mut position: RenderPosition = operation.rect.into();
+        position.transformation = position.transformation * operation.transforms.affine;
 
-        for transform in &operation.transforms {
-            match transform {
-                Transform::Rotate(angle) => {
-                    position.rotate(*angle);
-                }
-                Transform::Translate { x, y } => {
-                    position.translate(*x, *y);
-                }
-            }
-        }
-
-        transform_cache.release(operation.transforms);
         Instance::new(operation.tex_coords, position, operation.color_matrix)
     }))
     .collect::<Vec<_>>();

@@ -2,8 +2,6 @@ use std::{collections::BTreeMap, mem::size_of};
 
 use wgpu::{util::DeviceExt, Buffer, BufferSlice, BufferUsages, Device, Queue};
 
-use crate::renderer::Transform;
-
 #[derive(Debug)]
 pub(crate) struct BufferCache {
     vertex_map: BTreeMap<u64, Vec<ReusableBuffer>>,
@@ -123,42 +121,5 @@ impl ReusableBuffer {
         queue.write_buffer(&self.buffer, 0, content);
 
         self.current_size = current_size;
-    }
-}
-
-pub(crate) struct TransformCache {
-    created: usize,
-    transforms: Vec<Vec<Transform>>,
-}
-
-impl TransformCache {
-    pub(crate) fn new() -> Self {
-        Self {
-            created: 0,
-            transforms: Vec::with_capacity(256),
-        }
-    }
-
-    pub(crate) fn get(&mut self) -> Vec<Transform> {
-        self.created += 1;
-        if let Some(transforms) = self.transforms.pop() {
-            transforms
-        } else {
-            Vec::with_capacity(8)
-        }
-    }
-
-    pub(crate) fn release(&mut self, transforms: Vec<Transform>) {
-        let mut transforms = transforms;
-        transforms.truncate(0);
-        self.transforms.push(transforms)
-    }
-
-    pub(crate) fn free_unused(&mut self) {
-        if self.created < self.transforms.len() {
-            let new_len = self.created + (self.transforms.len() - self.created) / 2;
-            self.transforms.truncate(new_len);
-        }
-        self.created = 0;
     }
 }

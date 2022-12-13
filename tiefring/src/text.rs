@@ -5,10 +5,9 @@ use rect_packer::Packer;
 use wgpu::{BindGroup, BindGroupLayout, Device, Queue, Sampler};
 
 use crate::{
-    cache::TransformCache,
-    renderer::{ColorMatrix, RenderOperation, Transform},
+    renderer::{ColorMatrix, RenderOperation},
     sprite::{Texture, TextureContext, TextureId, TEXTURE_INDEX},
-    Color, Error, Position, Rect,
+    Color, Error, Position, Rect, Transform,
 };
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, Debug)]
@@ -264,11 +263,10 @@ impl TextConverter {
         color: Color,
         position: Position,
         font_for_px: &Rc<RefCell<SizedFont>>,
-        transforms: Vec<Transform>,
+        transforms: Transform,
         device: &Device,
         queue: &Queue,
         texture_context: &TextureContext,
-        transform_cache: &mut TransformCache,
     ) -> Vec<RenderOperation> {
         let char_count: usize = text.len();
 
@@ -297,19 +295,15 @@ impl TextConverter {
             .glyphs()
             .iter()
             .filter_map(|glyph| {
-                let rect = Rect::new(glyph.x, glyph.y, glyph.width as f32, glyph.height as f32);
+                let rect = Rect::new(0.0, 0.0, glyph.width as f32, glyph.height as f32);
 
                 font_for_px
                     .get_or_create_character(glyph.parent, device, queue, texture_context)
-                    .map(|character| {
-                        let mut char_transform = transform_cache.get();
-                        char_transform.extend(&transforms);
-                        RenderOperation {
-                            tex_coords: character.tex_coords,
-                            rect,
-                            color_matrix,
-                            transforms: char_transform,
-                        }
+                    .map(|character| RenderOperation {
+                        tex_coords: character.tex_coords,
+                        rect,
+                        color_matrix,
+                        transforms: transforms * Transform::from_translation(glyph.x, glyph.y),
                     })
             })
             .collect();
